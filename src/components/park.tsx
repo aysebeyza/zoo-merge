@@ -1,0 +1,225 @@
+import { useEffect, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+
+import { COLOR_HEX } from '@/game/colors';
+import { animalFor } from '@/game/config';
+import { formatNumber } from '@/game/format';
+import { goldPerSecond, releaseValue, type ParkAnimal } from '@/game/state';
+
+type Props = {
+  animals: ParkAnimal[];
+  selectedId: number | null;
+  onSelect: (id: number | null) => void;
+  onRelease: (id: number) => void;
+};
+
+const DECORATIONS = [
+  { emoji: '🌳', top: '6%', left: '4%' },
+  { emoji: '🌳', top: '10%', left: '84%' },
+  { emoji: '🌷', top: '78%', left: '8%' },
+  { emoji: '🌼', top: '84%', left: '88%' },
+  { emoji: '🪨', top: '48%', left: '90%' },
+] as const;
+
+export function Park({ animals, selectedId, onSelect, onRelease }: Props) {
+  const [area, setArea] = useState({ width: 0, height: 0 });
+  const selected = animals.find((a) => a.id === selectedId) ?? null;
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setArea({ width, height });
+  };
+
+  return (
+    <View style={styles.park} onLayout={onLayout}>
+      {DECORATIONS.map((d, i) => (
+        <Text key={i} style={[styles.decoration, { top: d.top, left: d.left }]}>
+          {d.emoji}
+        </Text>
+      ))}
+
+      {animals.length === 0 && (
+        <Text style={styles.empty}>Yumurtayı kuluçkaya koy, hayvanın burada gezsin!</Text>
+      )}
+
+      {area.width > 0 &&
+        animals.map((animal) => (
+          <WanderingAnimal
+            key={animal.id}
+            animal={animal}
+            area={area}
+            selected={animal.id === selectedId}
+            onPress={() => onSelect(animal.id === selectedId ? null : animal.id)}
+          />
+        ))}
+
+      {selected && (
+        <View style={styles.panel}>
+          <Text style={styles.panelText}>
+            {animalFor(selected.level).emoji} {animalFor(selected.level).name} · {formatNumber(goldPerSecond(selected))}/sn
+          </Text>
+          <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
+            <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected))} 🪙</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+type WanderingProps = {
+  animal: ParkAnimal;
+  area: { width: number; height: number };
+  selected: boolean;
+  onPress: () => void;
+};
+
+function WanderingAnimal({ animal, area, selected, onPress }: WanderingProps) {
+  const size = 34 + animal.level * 3;
+  const [position] = useState(() => new Animated.ValueXY());
+
+  useEffect(() => {
+    const maxX = Math.max(0, area.width - size);
+    const maxY = Math.max(0, area.height - size - 8);
+    const randomPoint = () => ({ x: Math.random() * maxX, y: Math.random() * maxY });
+    let alive = true;
+
+    const walk = () => {
+      if (!alive) return;
+      Animated.sequence([
+        Animated.timing(position, {
+          toValue: randomPoint(),
+          duration: 2500 + Math.random() * 2500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(600 + Math.random() * 1800),
+      ]).start(({ finished }) => finished && walk());
+    };
+
+    position.setValue(randomPoint());
+    walk();
+    return () => {
+      alive = false;
+      position.stopAnimation();
+    };
+  }, [area.width, area.height, size, position]);
+
+  return (
+    <Animated.View style={[styles.animal, { transform: position.getTranslateTransform() }]}>
+      <Pressable onPress={onPress} hitSlop={8} style={{ alignItems: 'center' }}>
+        {animal.lastDropAt !== null && <CoinPop key={animal.lastDropAt} amount={animal.lastDropAmount} />}
+        <Text style={{ fontSize: size }}>{animalFor(animal.level).emoji}</Text>
+        <View
+          style={[
+            styles.groundMark,
+            {
+              width: size * 0.9,
+              backgroundColor: COLOR_HEX[animal.variant.color],
+              borderWidth: selected ? 2 : 0,
+            },
+          ]}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function CoinPop({ amount }: { amount: number }) {
+  const [progress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    Animated.timing(progress, { toValue: 1, duration: 900, useNativeDriver: true }).start();
+  }, [progress]);
+
+  return (
+    <Animated.Text
+      style={[
+        styles.coinPop,
+        {
+          opacity: progress.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+          transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -28] }) }],
+        },
+      ]}>
+      +{formatNumber(amount)}
+    </Animated.Text>
+  );
+}
+
+const styles = StyleSheet.create({
+  park: {
+    flex: 1,
+    minHeight: 180,
+    marginHorizontal: 12,
+    borderRadius: 24,
+    backgroundColor: '#9BD770',
+    borderWidth: 4,
+    borderColor: '#7DBB55',
+    overflow: 'hidden',
+  },
+  decoration: {
+    position: 'absolute',
+    fontSize: 28,
+  },
+  empty: {
+    position: 'absolute',
+    top: '40%',
+    left: 24,
+    right: 24,
+    textAlign: 'center',
+    color: '#3E6B26',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  animal: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  groundMark: {
+    height: 8,
+    marginTop: -6,
+    borderRadius: 8,
+    opacity: 0.7,
+    borderColor: 'white',
+  },
+  coinPop: {
+    position: 'absolute',
+    top: -18,
+    color: '#FFE14D',
+    fontSize: 15,
+    fontWeight: '900',
+    textShadowColor: '#7A4B00',
+    textShadowRadius: 3,
+    textShadowOffset: { width: 0, height: 1 },
+  },
+  panel: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,248,232,0.96)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  panelText: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#5B3A1E',
+  },
+  releaseButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFC93C',
+  },
+  releaseText: {
+    fontWeight: '800',
+    color: '#5B3A1E',
+  },
+});
