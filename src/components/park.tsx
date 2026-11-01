@@ -80,7 +80,7 @@ export function Park({
           <WanderingAnimal
             key={animal.id}
             animal={animal}
-            mood={moodFor(fullnessAt(animal, now))}
+            fullness={fullnessAt(animal, now)}
             area={area}
             selected={animal.id === selectedId}
             onPress={() => onSelect(animal.id === selectedId ? null : animal.id)}
@@ -125,14 +125,15 @@ export function Park({
 
 type WanderingProps = {
   animal: ParkAnimal;
-  mood: Mood;
+  fullness: number;
   area: { width: number; height: number };
   selected: boolean;
   onPress: () => void;
 };
 
-function WanderingAnimal({ animal, mood, area, selected, onPress }: WanderingProps) {
+function WanderingAnimal({ animal, fullness, area, selected, onPress }: WanderingProps) {
   const size = 34 + animal.level * 3;
+  const mood = moodFor(fullness);
   const [position] = useState(() => new Animated.ValueXY());
   const placed = useRef(false);
   // Dokümana göre: mutlu hayvan oynar, acıkmış hayvan yavaş yürür, üzgün hayvan köşede oturur.
@@ -201,6 +202,15 @@ function WanderingAnimal({ animal, mood, area, selected, onPress }: WanderingPro
             },
           ]}
         />
+        {/* Küçük tokluk çubuğu: çocuk dokunmadan, bir bakışta kimin acıktığını görsün. */}
+        <View style={[styles.miniBar, { width: size * 0.8 }]}>
+          <View
+            style={[
+              styles.miniBarFill,
+              { width: `${Math.max(8, fullness * 100)}%`, backgroundColor: FULLNESS_COLOR[mood] },
+            ]}
+          />
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -305,6 +315,18 @@ const styles = StyleSheet.create({
   fullnessFill: {
     height: '100%',
     borderRadius: 4,
+  },
+  miniBar: {
+    height: 8,
+    marginTop: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(91,58,30,0.35)',
+    overflow: 'hidden',
+  },
+  miniBarFill: {
+    height: '100%',
   },
   moodBubble: {
     position: 'absolute',
