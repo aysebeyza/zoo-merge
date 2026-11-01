@@ -170,6 +170,41 @@ export function upgradeCost(id: UpgradeId, currentLevel: number): number | null 
   return upgradeFor(id).costs[currentLevel] ?? null;
 }
 
+// --- Hayvan yetenekleri (dokümandaki tablo) ---
+
+export type SkillConfig = {
+  name: string;
+  description: string;
+  /** 1., 2. ve 3. seviyenin altın kazancına eklediği oran. Büyük hayvanlarda küçük, ejderha aşırı güçlenmesin. */
+  bonuses: readonly [number, number, number];
+};
+
+const SKILLS: readonly SkillConfig[] = [
+  { name: 'Sevimlilik', description: 'Ziyaretçi daha çok altın bırakır', bonuses: [0.3, 0.6, 1] },
+  { name: 'Gösteri', description: 'Daha çok ziyaretçi gelir', bonuses: [0.25, 0.5, 0.75] },
+  { name: 'Görkem', description: 'Ziyaretçiler daha uzun kalır', bonuses: [0.2, 0.4, 0.6] },
+  { name: 'Kral', description: 'Herkes onu görmeye gelir', bonuses: [0.15, 0.3, 0.45] },
+];
+
+export const MAX_SKILL = 3;
+/** Bir sonraki yetenek seviyesinin açılması için hayvanın parkta kalması gereken süre. */
+export const SKILL_UNLOCK_SEC = [5 * 60, 30 * 60, 2 * 60 * 60] as const;
+/** Yetenek seviyesinin bedeli: hayvanın bu kadar saniyelik kazancı. */
+export const SKILL_COST_SEC = [2 * 60, 10 * 60, 30 * 60] as const;
+
+/** Civciv-kedi, köpek-penguen, zürafa-aslan ve ejderha ayrı yetenek kullanır. */
+export function skillFor(level: number): SkillConfig {
+  if (level <= 3) return SKILLS[0];
+  if (level <= 6) return SKILLS[1];
+  if (level <= 9) return SKILLS[2];
+  return SKILLS[3];
+}
+
+/** Yetenek seviyesine göre kazanç çarpanı; 0. seviye 1. */
+export function skillMultiplier(level: number, skill: number): number {
+  return skill === 0 ? 1 : 1 + skillFor(level).bonuses[skill - 1];
+}
+
 // --- Besleme ---
 // Dokümanda tokluk aralıkları var ama süreler ve fiyat yok. Aşağıdakiler öneri; testlerde ayarlanacak.
 

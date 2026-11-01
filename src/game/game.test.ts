@@ -14,13 +14,14 @@ import {
   upgradeFor,
   type UpgradeId,
 } from './config.ts';
-import { formatDuration, formatNumber } from './format.ts';
+import { formatDuration, formatNumber, formatWait } from './format.ts';
 import { parseSave, SAVE_VERSION, serializeSave } from './save.ts';
 import {
   createInitialState,
   feedAllCost,
   fullnessAt,
   gameReducer,
+  goldPerSecond,
   type Egg,
   type GameState,
 } from './state.ts';
@@ -131,6 +132,8 @@ describe('kuluçka ve park', () => {
       lastDropAt: null,
       lastDropAmount: 0,
       fedAt: T0,
+      skill: 0,
+      parkedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT);
@@ -300,6 +303,8 @@ describe('yükseltmeler', () => {
       lastDropAt: null,
       lastDropAmount: 0,
       fedAt: T0,
+      skill: 0,
+      parkedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT + 1);
@@ -412,6 +417,68 @@ describe('besleme', () => {
   });
 });
 
+describe('yetenekler', () => {
+  it('dokümandaki tam gelişmiş örnekler tutar', () => {
+    // Doküman: kedi 11/sn, penguen 105/sn, aslan 1.080/sn, ejderha 2.175/sn.
+    const full = (level: number) => goldPerSecond({ level, variant: plainVariant('red'), skill: 3 });
+    assert.equal(full(3), 11);
+    assert.equal(full(6), 105);
+    assert.equal(full(9), 1080);
+    assert.equal(full(10), 2175);
+  });
+
+  it('seviye parkta kalma süresi dolunca açılır ve hayvanın kazancına göre ücretlidir', () => {
+    const { state, hatchAt } = withChick();
+    const id = state.park[0].id;
+    const rich = { ...state, gold: 10_000 };
+    // 5 dakika dolmadan geliştirilemez.
+    const early = gameReducer({ ...rich, now: hatchAt + 5 * 60_000 - 1 }, { type: 'upgradeSkill', id });
+    assert.equal(early.park[0].skill, 0);
+    // Civciv saniyede 1 altın kazanır; 1. seviye 2 dakikalık kazanç = 120 altın.
+    const ready = { ...rich, now: hatchAt + 5 * 60_000 };
+    const up = gameReducer(ready, { type: 'upgradeSkill', id });
+    assert.equal(up.park[0].skill, 1);
+    assert.equal(up.gold, ready.gold - 120);
+    // 2. seviye için 30 dakika dolmalı.
+    assert.equal(gameReducer(up, { type: 'upgradeSkill', id }).park[0].skill, 1);
+  });
+
+  it('altın yetmezse ya da en üst seviyedeyse geliştirilemez', () => {
+    const { state, hatchAt } = withChick();
+    const later = { ...state, now: hatchAt + 3 * HOUR };
+    const id = state.park[0].id;
+    assert.equal(gameReducer({ ...later, gold: 0 }, { type: 'upgradeSkill', id }).park[0].skill, 0);
+    const maxed = { ...later, gold: 1e9, park: [{ ...later.park[0], skill: 3 }] };
+    assert.equal(gameReducer(maxed, { type: 'upgradeSkill', id }), maxed);
+  });
+
+  it('yetenek kazancı artırır ama üzgün hayvanda çalışmaz', () => {
+    const { state, hatchAt } = withChick();
+    // Köpek, 3. seviye Gösteri (+%75): 36 yerine 63 altın.
+    const dog = { ...state.park[0], level: 4, skill: 3, nextDropAt: hatchAt + 3000 };
+    const at = (fullness: number) => {
+      const fedAt = hatchAt + 3000 - (1 - fullness) * HUNGER_SEC * 1000;
+      const s = gameReducer({ ...state, park: [{ ...dog, fedAt }] }, { type: 'tick', now: hatchAt + 3000 });
+      return s.gold - state.gold;
+    };
+    assert.equal(at(0.8), 63);
+    assert.equal(at(0.3), 32);
+    // Üzgün: yetenek yok, 36 altının onda biri.
+    assert.equal(at(0.1), 4);
+  });
+
+  it('kaçan hayvanın yumurtası yetenek seviyesini korur, yumurtadan çıkınca geri gelir', () => {
+    const { state, hatchAt } = withChick();
+    const skilled = { ...state, park: [{ ...state.park[0], skill: 2 }] };
+    const escapeAt = hatchAt + (HUNGER_SEC + ESCAPE_AFTER_EMPTY_SEC) * 1000;
+    let s = gameReducer(skilled, { type: 'tick', now: escapeAt });
+    assert.equal(s.grid[0]?.skill, 2);
+    s = gameReducer(s, { type: 'incubate', from: 0, slot: 0 });
+    s = gameReducer(s, { type: 'tick', now: escapeAt + ANIMALS[0].incubationSec * 1000 });
+    assert.equal(s.park[0].skill, 2);
+  });
+});
+
 describe('kayıt', () => {
   it('kaydedilen oyun aynen geri yüklenir', () => {
     const { state } = withChick();
@@ -458,5 +525,12 @@ describe('biçimlendirme', () => {
   it('süreleri yazar', () => {
     assert.equal(formatDuration(95), '1:35');
     assert.equal(formatDuration(3725), '1:02:05');
+  });
+
+  it('bekleme sürelerini kabaca yazar', () => {
+    assert.equal(formatWait(20), '1 dk');
+    assert.equal(formatWait(95), '2 dk');
+    assert.equal(formatWait(5400), '1 sa 30 dk');
+    assert.equal(formatWait(7200), '2 sa');
   });
 });

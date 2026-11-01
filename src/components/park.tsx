@@ -2,13 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { COLOR_HEX } from '@/game/colors';
-import { animalFor, hungerMultiplier, moodFor, type Mood } from '@/game/config';
-import { formatNumber } from '@/game/format';
-import { fullnessAt, goldPerSecond, releaseValue, type ParkAnimal } from '@/game/state';
+import { animalFor, MAX_SKILL, moodFor, skillFor, type Mood } from '@/game/config';
+import { formatNumber, formatWait } from '@/game/format';
+import {
+  animalIncomePerSecond,
+  fullnessAt,
+  releaseValue,
+  skillCost,
+  skillUnlockAt,
+  type ParkAnimal,
+} from '@/game/state';
 
 type Props = {
   animals: ParkAnimal[];
   now: number;
+  gold: number;
   /** "Daha çok ziyaretçi" yükseltmesinin kazanç çarpanı. */
   incomeBonus: number;
   /** Bütün aç hayvanları doyurmanın bedeli; 0 ise herkes tok. */
@@ -18,7 +26,15 @@ type Props = {
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onRelease: (id: number) => void;
+  onUpgradeSkill: (id: number) => void;
 };
+
+/** Yeteneğin bir sonraki seviyesi şimdi geliştirilebilir mi: süre dolmuş ve altın yetiyor. */
+function skillReady(animal: ParkAnimal, now: number, gold: number, bonus: number): boolean {
+  const unlockAt = skillUnlockAt(animal);
+  const cost = skillCost(animal, bonus);
+  return unlockAt !== null && cost !== null && now >= unlockAt && gold >= cost;
+}
 
 /** Hayvanın başının üstünde ruh haline göre çıkan işaret. */
 const MOOD_BUBBLE: Record<Mood, string | null> = {
@@ -46,6 +62,7 @@ const DECORATIONS = [
 export function Park({
   animals,
   now,
+  gold,
   incomeBonus,
   feedCost,
   canFeed,
@@ -53,6 +70,7 @@ export function Park({
   selectedId,
   onSelect,
   onRelease,
+  onUpgradeSkill,
 }: Props) {
   const [area, setArea] = useState({ width: 0, height: 0 });
   const selected = animals.find((a) => a.id === selectedId) ?? null;
@@ -81,6 +99,7 @@ export function Park({
             key={animal.id}
             animal={animal}
             fullness={fullnessAt(animal, now)}
+            skillReady={skillReady(animal, now, gold, incomeBonus)}
             area={area}
             selected={animal.id === selectedId}
             onPress={() => onSelect(animal.id === selectedId ? null : animal.id)}
@@ -99,7 +118,7 @@ export function Park({
           <View style={styles.panelInfo}>
             <Text style={styles.panelText}>
               {animalFor(selected.level).emoji} {animalFor(selected.level).name} ·{' '}
-              {formatNumber(goldPerSecond(selected, incomeBonus) * hungerMultiplier(selectedFullness))}/sn
+              {formatNumber(animalIncomePerSecond(selected, incomeBonus, now))}/sn
             </Text>
             {/* Tokluk çubuğu: yeşil tok, sarı acıkmış, turuncu üzgün, kırmızı kaçmak üzere. */}
             <View style={styles.fullnessBar}>
@@ -113,25 +132,74 @@ export function Park({
                 ]}
               />
             </View>
+            <Text style={styles.skillText}>
+              {'★'.repeat(selected.skill)}
+              <Text style={styles.skillEmpty}>{'★'.repeat(MAX_SKILL - selected.skill)}</Text> {skillFor(selected.level).name}
+              {selected.skill > 0 && ` +%${Math.round(skillFor(selected.level).bonuses[selected.skill - 1] * 100)}`}
+            </Text>
           </View>
-          <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
-            <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected, incomeBonus))} 🪙</Text>
-          </Pressable>
+          <View style={styles.panelActions}>
+            <SkillButton
+              animal={selected}
+              now={now}
+              gold={gold}
+              bonus={incomeBonus}
+              onPress={() => onUpgradeSkill(selected.id)}
+            />
+            <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
+              <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected, incomeBonus))} 🪙</Text>
+            </Pressable>
+          </View>
         </View>
       )}
     </View>
   );
 }
 
+type SkillButtonProps = {
+  animal: ParkAnimal;
+  now: number;
+  gold: number;
+  bonus: number;
+  onPress: () => void;
+};
+
+/** Yetenek düğmesi: en üst seviye, kilitli (kalan süre) ya da altınla geliştir. */
+function SkillButton({ animal, now, gold, bonus, onPress }: SkillButtonProps) {
+  const unlockAt = skillUnlockAt(animal);
+  const cost = skillCost(animal, bonus);
+  if (unlockAt === null || cost === null) {
+    return (
+      <View style={[styles.skillButton, styles.skillMaxed]}>
+        <Text style={styles.skillButtonText}>★ Yetenek tam!</Text>
+      </View>
+    );
+  }
+  if (now < unlockAt) {
+    return (
+      <View style={[styles.skillButton, styles.skillLocked]}>
+        <Text style={styles.skillButtonText}>🔒 {formatWait((unlockAt - now) / 1000)} sonra</Text>
+      </View>
+    );
+  }
+  return (
+    <Pressable style={[styles.skillButton, gold < cost && styles.skillLocked]} disabled={gold < cost} onPress={onPress}>
+      <Text style={styles.skillButtonText}>★ Geliştir 🪙 {formatNumber(cost)}</Text>
+    </Pressable>
+  );
+}
+
 type WanderingProps = {
   animal: ParkAnimal;
   fullness: number;
+  /** Yetenek şimdi geliştirilebiliyorsa hayvanın üstünde küçük bir yıldız çıkar. */
+  skillReady: boolean;
   area: { width: number; height: number };
   selected: boolean;
   onPress: () => void;
 };
 
-function WanderingAnimal({ animal, fullness, area, selected, onPress }: WanderingProps) {
+function WanderingAnimal({ animal, fullness, skillReady, area, selected, onPress }: WanderingProps) {
   const size = 34 + animal.level * 3;
   const mood = moodFor(fullness);
   const [position] = useState(() => new Animated.ValueXY());
@@ -191,6 +259,7 @@ function WanderingAnimal({ animal, fullness, area, selected, onPress }: Wanderin
       <Pressable onPress={onPress} hitSlop={8} style={{ alignItems: 'center' }}>
         {animal.lastDropAt !== null && <CoinPop key={animal.lastDropAt} amount={animal.lastDropAmount} />}
         {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
+        {skillReady && <Text style={styles.skillBubble}>⭐</Text>}
         <Text style={{ fontSize: size, opacity: mood === 'leaving' ? 0.6 : 1 }}>{animalFor(animal.level).emoji}</Text>
         <View
           style={[
@@ -292,14 +361,47 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 16,
     backgroundColor: 'rgba(255,248,232,0.96)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
   },
   panelInfo: {
-    flexShrink: 1,
     gap: 6,
+  },
+  panelActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  skillText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFB020',
+  },
+  skillEmpty: {
+    color: 'rgba(91,58,30,0.2)',
+  },
+  skillButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#B983FF',
+  },
+  skillLocked: {
+    opacity: 0.5,
+  },
+  skillMaxed: {
+    backgroundColor: '#8EDB8E',
+  },
+  skillButtonText: {
+    fontWeight: '800',
+    color: 'white',
+  },
+  skillBubble: {
+    position: 'absolute',
+    top: -20,
+    left: -12,
+    fontSize: 16,
   },
   panelText: {
     fontSize: 15,
@@ -360,7 +462,10 @@ const styles = StyleSheet.create({
     color: '#5B3A1E',
   },
   releaseButton: {
-    paddingHorizontal: 12,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: '#FFC93C',

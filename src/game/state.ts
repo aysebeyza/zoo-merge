@@ -20,9 +20,14 @@ import {
   incubationFactor,
   INCUBATOR_SLOTS,
   MAX_LEVEL,
+  MAX_SKILL,
+  moodFor,
   OFFLINE_EARNING_CAP_SEC,
   parkLimit,
   RELEASE_VALUE_SEC,
+  SKILL_COST_SEC,
+  SKILL_UNLOCK_SEC,
+  skillMultiplier,
   START_GOLD,
   upgradeCost,
   UPGRADES,
@@ -33,6 +38,8 @@ export type Egg = {
   id: number;
   level: number;
   variant: Variant;
+  /** Kaçıp yumurtasına dönen hayvanın yetenek seviyesi; yumurtadan çıkınca korunur. */
+  skill?: number;
 };
 
 export type IncubatorSlot = {
@@ -51,6 +58,10 @@ export type ParkAnimal = {
   lastDropAmount: number;
   /** Son doyurulduğu an. Tokluk o anda %100'dür ve HUNGER_SEC içinde %0'a iner. */
   fedAt: number;
+  /** Yetenek seviyesi, 0-3. */
+  skill: number;
+  /** Parka çıktığı an; yetenek seviyeleri parkta kalma süresine göre açılır. */
+  parkedAt: number;
 };
 
 export type GameState = {
@@ -89,6 +100,8 @@ export type GameAction =
   | { type: 'moveEgg'; from: number; to: number }
   | { type: 'incubate'; from: number; slot: number }
   | { type: 'releaseAnimal'; id: number }
+  /** Hayvanın yeteneğini bir seviye geliştirir; süre dolduysa ve altın yetiyorsa. */
+  | { type: 'upgradeSkill'; id: number }
   /** Mama kabı: aç hayvanları, en açtan başlayarak altın yettiği kadar doyurur. */
   | { type: 'feedAll' }
   /** Hediye kutusundaki ilk yumurtayı birleştirme alanına alır. */
@@ -157,26 +170,56 @@ export function feedAllCost(state: GameState): number {
   return state.park.reduce((sum, a) => sum + feedCost(a, state.now, bonus), 0);
 }
 
-/** bonus: "Daha çok ziyaretçi" yükseltmesinin çarpanı (incomeBonus). */
-export function dropAmount(animal: { level: number; variant: Variant }, bonus = 1): number {
-  return Math.round(animalFor(animal.level).dropAmount * goldMultiplier(animal.variant) * bonus);
+type Earner = { level: number; variant: Variant; skill?: number };
+
+/** bonus: "Daha çok ziyaretçi" yükseltmesinin çarpanı (incomeBonus). Hayvanın yeteneği de hesaba katılır. */
+export function dropAmount(animal: Earner, bonus = 1): number {
+  return Math.round(
+    animalFor(animal.level).dropAmount *
+      goldMultiplier(animal.variant) *
+      skillMultiplier(animal.level, animal.skill ?? 0) *
+      bonus,
+  );
 }
 
-export function goldPerSecond(animal: { level: number; variant: Variant }, bonus = 1): number {
+export function goldPerSecond(animal: Earner, bonus = 1): number {
   return dropAmount(animal, bonus) / animalFor(animal.level).dropEverySec;
+}
+
+/** Hayvanın t anındaki kazanç çarpanı tokluğa göre; üzgün hayvanın yeteneği çalışmaz (doküman). */
+function earningPerSecondAt(animal: ParkAnimal, bonus: number, t: number): number {
+  const fullness = fullnessAt(animal, t);
+  const skillWorks = moodFor(fullness) === 'happy' || moodFor(fullness) === 'hungry';
+  return goldPerSecond(skillWorks ? animal : { ...animal, skill: 0 }, bonus) * hungerMultiplier(fullness);
 }
 
 /** now verilirse hayvanların o anki tokluğu da hesaba katılır. */
 export function parkIncomePerSecond(park: ParkAnimal[], bonus = 1, now?: number): number {
   return park.reduce(
-    (sum, animal) =>
-      sum + goldPerSecond(animal, bonus) * (now === undefined ? 1 : hungerMultiplier(fullnessAt(animal, now))),
+    (sum, animal) => sum + (now === undefined ? goldPerSecond(animal, bonus) : earningPerSecondAt(animal, bonus, now)),
     0,
   );
 }
 
-export function releaseValue(animal: { level: number; variant: Variant }, bonus = 1): number {
+/** Seçili hayvanın panelde gösterilen o anki kazancı. */
+export function animalIncomePerSecond(animal: ParkAnimal, bonus: number, now: number): number {
+  return earningPerSecondAt(animal, bonus, now);
+}
+
+export function releaseValue(animal: Earner, bonus = 1): number {
   return Math.round(goldPerSecond(animal, bonus) * RELEASE_VALUE_SEC);
+}
+
+/** Yeteneğin bir sonraki seviyesi ne zaman açılır; en üst seviyedeyse null. */
+export function skillUnlockAt(animal: ParkAnimal): number | null {
+  if (animal.skill >= MAX_SKILL) return null;
+  return animal.parkedAt + SKILL_UNLOCK_SEC[animal.skill] * 1000;
+}
+
+/** Yeteneğin bir sonraki seviyesinin bedeli: hayvanın kendi kazancına göre; en üst seviyedeyse null. */
+export function skillCost(animal: ParkAnimal, bonus = 1): number | null {
+  if (animal.skill >= MAX_SKILL) return null;
+  return Math.ceil(goldPerSecond(animal, bonus) * SKILL_COST_SEC[animal.skill]);
 }
 
 export function stateIncomeBonus(state: GameState): number {
@@ -292,6 +335,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'dismissNewAnimal':
       return { ...state, newAnimalQueue: state.newAnimalQueue.slice(1) };
 
+    case 'upgradeSkill': {
+      const animal = state.park.find((a) => a.id === action.id);
+      if (!animal) return state;
+      const unlockAt = skillUnlockAt(animal);
+      const cost = skillCost(animal, stateIncomeBonus(state));
+      if (unlockAt === null || cost === null || state.now < unlockAt || state.gold < cost) return state;
+      return {
+        ...state,
+        gold: state.gold - cost,
+        park: state.park.map((a) => (a.id === animal.id ? { ...a, skill: a.skill + 1 } : a)),
+      };
+    }
+
     case 'feedAll': {
       const { ids, cost } = feedPlan(state);
       if (ids.length === 0) return state;
@@ -363,11 +419,16 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
     }
     // Her düşürme, hayvanın o anki tokluğuna göre altın verir.
     const intervalMs = animalFor(animal.level).dropEverySec * 1000;
-    const amount = dropAmount(animal, bonus);
+    // Üzgün ve tokluğu bitmiş hayvanın yeteneği çalışmaz.
+    const withSkill = dropAmount(animal, bonus);
+    const withoutSkill = dropAmount({ ...animal, skill: 0 }, bonus);
     let t = animal.nextDropAt;
     let lastAmount = 0;
     while (t <= earnUntil) {
-      lastAmount = Math.round(amount * hungerMultiplier(fullnessAt(animal, t)));
+      const fullness = fullnessAt(animal, t);
+      const mood = moodFor(fullness);
+      const amount = mood === 'happy' || mood === 'hungry' ? withSkill : withoutSkill;
+      lastAmount = Math.round(amount * hungerMultiplier(fullness));
       earned += lastAmount;
       t += intervalMs;
     }
@@ -388,7 +449,7 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
   if (escaped.length > 0) {
     park = park.filter((a) => now < a.fedAt + escapeAfterMs);
     for (const animal of escaped) {
-      const egg: Egg = { id: nextId++, level: animal.level, variant: animal.variant };
+      const egg: Egg = { id: nextId++, level: animal.level, variant: animal.variant, skill: animal.skill };
       const cell = grid.indexOf(null);
       if (cell === -1) {
         giftBox = [...giftBox, egg];
@@ -403,7 +464,7 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
   // Kuluçkası biten yumurtalar, parkta yer varsa hayvan olarak parka çıkar.
   const incubator = state.incubator.map((slot) => {
     if (!slot || now < slot.startedAt + slot.durationMs || park.length >= maxPark) return slot;
-    const { level, variant } = slot.egg;
+    const { level, variant, skill = 0 } = slot.egg;
     park = [
       ...park,
       {
@@ -414,6 +475,8 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
         lastDropAt: null,
         lastDropAmount: 0,
         fedAt: now,
+        skill,
+        parkedAt: now,
       },
     ];
     if (!discovered.includes(level)) {

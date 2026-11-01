@@ -124,6 +124,11 @@ export default function GameScreen() {
       <Park
         animals={state.park}
         now={state.now}
+        gold={state.gold}
+        onUpgradeSkill={(id) => {
+          dispatch({ type: 'upgradeSkill', id });
+          haptic('success');
+        }}
         incomeBonus={incomeBonus}
         feedCost={feedCost}
         canFeed={canFeed}

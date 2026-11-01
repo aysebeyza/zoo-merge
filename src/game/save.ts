@@ -37,8 +37,13 @@ export function parseSave(json: string | null, firstColor: ColorId): GameState |
     ...fresh,
     ...saved,
     upgrades,
-    // Besleme gelmeden önceki kayıtlarda tokluk yok: hayvanlar kaydın yapıldığı anda tok sayılır.
-    park: saved.park.map((animal) => ({ ...animal, fedAt: animal.fedAt ?? saved.now })),
+    // Eski kayıtlarda olmayan hayvan alanları: tokluk ve parka çıkış anı kaydın yapıldığı an, yetenek 0.
+    park: saved.park.map((animal) => ({
+      ...animal,
+      fedAt: animal.fedAt ?? saved.now,
+      skill: animal.skill ?? 0,
+      parkedAt: animal.parkedAt ?? saved.now,
+    })),
     grid: fitLength(saved.grid, GRID_SIZE),
     incubator: fitLength(saved.incubator, incubatorSlots(upgrades.incubatorSlot)),
   };
