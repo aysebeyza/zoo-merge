@@ -57,10 +57,23 @@ export const START_GOLD = 100;
 export const FIRST_HATCH_SEC = 3;
 export const DIAMONDS_PER_NEW_ANIMAL = 5;
 
-/** Yumurta fiyatı her alımda biraz artar. */
-export function eggPrice(eggsBought: number): number {
-  return 25 + 2 * eggsBought;
-}
+// --- Yumurta sepeti ---
+// Yumurtalar altınla alınmaz: Tavuk Anne belli aralıklarla sepete yumurta bırakır (oyun kapalıyken de),
+// sepet dolunca durur. Böylece ilerleme altına değil zamana bağlıdır; ejderha 2-3 günlük oyunda çıkar.
+// Sayılar simülasyonla ayarlandı (npm run sim).
+
+/** Tavuk Anne yükseltmesinin seviyesine göre kaç saniyede bir sepete yumurta düşer. */
+export const BASKET_EVERY_SEC = [90, 75, 60, 45];
+/** Büyük sepet yükseltmesinin seviyesine göre sepet en fazla kaç yumurta alır. */
+export const BASKET_CAP = [40, 60, 90, 120];
+/** Yeni oyuna başlarken sepette kaç yumurta var; ilk hayvanlar hızlı çıksın diye sepet dolu başlar. */
+export const BASKET_START = 40;
+
+/**
+ * Kaldırılan "Otomatik yumurta" yükseltmesinin seviye bedelleri; daha önce alanlara toplamı iade edilir.
+ * Eski kayıtlardaki upgrades.autoEgg seviyesi bunun için okunur.
+ */
+export const AUTO_EGG_REFUND_COSTS = [150, 2_000, 20_000];
 
 /** Doğaya salınan hayvan, yaklaşık 1 dakikalık kazancını verir. */
 export const RELEASE_VALUE_SEC = 60;
@@ -69,19 +82,15 @@ export const RELEASE_VALUE_SEC = 60;
 // Dokümanda etkiler var ama fiyatlar ve seviye sayıları yok. Aşağıdakiler öneri; testlerde ayarlanacak.
 
 export type UpgradeId =
-  | 'autoEgg'
+  | 'fasterHen'
+  | 'biggerBasket'
   | 'moreVisitors'
   | 'fasterIncubator'
   | 'incubatorSlot'
   | 'betterEgg'
   | 'biggerPark';
 
-/** Otomatik yumurta: seviyeye göre kaç saniyede bir bedava yumurta düşer (0. seviye kapalı). */
-export const AUTO_EGG_EVERY_SEC = [0, 30, 20, 10];
-/**
- * Daha iyi yumurta: yeni yumurtanın 2. seviyeden başlama şansı. Dokümanda yalnızca satın alınan
- * yumurtalar için yazıyordu; çocuğun kafası karışmasın diye otomatik yumurtalara da uygulanıyor.
- */
+/** Daha iyi yumurta: sepetten alınan yumurtanın 2. seviyeden başlama şansı. */
 export const BETTER_EGG_CHANCE = [0, 0.25, 0.5, 1];
 
 export function parkLimit(biggerParkLevel: number): number {
@@ -114,11 +123,18 @@ export type UpgradeConfig = {
 
 export const UPGRADES: readonly UpgradeConfig[] = [
   {
-    id: 'autoEgg',
-    name: 'Otomatik yumurta',
-    emoji: '🥚',
-    costs: [150, 2_000, 20_000],
-    effect: (level) => (level === 0 ? 'Kapalı' : `${AUTO_EGG_EVERY_SEC[level]} sn'de 1 bedava yumurta`),
+    id: 'fasterHen',
+    name: 'Tavuk Anne',
+    emoji: '🐔',
+    costs: [500, 5_000, 50_000],
+    effect: (level) => `${BASKET_EVERY_SEC[level]} sn'de 1 yumurta`,
+  },
+  {
+    id: 'biggerBasket',
+    name: 'Büyük sepet',
+    emoji: '🧺',
+    costs: [800, 8_000, 80_000],
+    effect: (level) => `Sepete ${BASKET_CAP[level]} yumurta sığar`,
   },
   {
     id: 'moreVisitors',

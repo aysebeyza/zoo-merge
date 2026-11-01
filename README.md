@@ -18,6 +18,7 @@ Terminalde çıkan QR kodu telefondaki Expo Go uygulamasıyla okut.
 | `npx expo start` | Geliştirme sunucusunu başlatır |
 | `npm test` | Oyun mantığı testlerini çalıştırır |
 | `npm run typecheck` | TypeScript hatalarını kontrol eder |
+| `npm run sim` | Denge simülasyonu: oyunu akıllı bir oyuncu gibi oynar, her hayvanın ne zaman çıktığını yazar |
 
 ## Klasörler
 
@@ -44,7 +45,8 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - "Yeni hayvan!" kutlaması ve elmas ödülü
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
-- 6 yükseltme: otomatik yumurta, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
+- Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 90 sn'de bir sepete yumurta bırakır (oyun kapalıyken de), sepet 40 yumurta alır ve dolu başlar. Sayılar simülasyonla ayarlandı: günde 3 × 20 dk oynayan çocuk ejderhayı 3. gün çıkarır (`npm run sim`).
+- 7 yükseltme: Tavuk Anne, büyük sepet, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
 - Besleme: tokluk zamanla azalır, aç hayvan daha az kazanır. Her hayvanın kendi yemi var (civciv tohum, tavşan havuç ...); yemler yem dükkanından alınıp stokta durur, bir yem hayvanı tamamen doyurur. Uzun süre aç kalan hayvan kendi yumurtasına döner; alan doluysa yumurta hediye kutusunda (🎁) bekler.
 - Hayvanlarım ekranı (parktaki 🐾 düğmesi): bütün hayvanlar tek tek, en aç olan en üstte; her hayvanın ne zaman acıkacağı yazar ("⏰ 1 sa sonra acıkır", "🍖 Şimdi besle!"); besle, yetenek geliştir, doğaya sal. İkinci sekmede yem dükkanı: her yemin parkta kaç hayvan için gerektiği ve stoğu, "Eksikleri al" ile her hayvana birer yem.
 - Yetenekler: her hayvanın 3 seviyeli yeteneği (Sevimlilik, Gösteri, Görkem, Kral). Seviyeler parkta kalma süresiyle açılır, hayvanın kendi kazancına göre altınla geliştirilir; üzgün hayvanda çalışmaz, kaçan hayvanın yumurtası seviyeyi korur.
@@ -55,6 +57,7 @@ Henüz olmayanlar: koleksiyon defteri, reklamlar.
 
 Kararlar:
 - Parkta birleştirme yapılmayacak: park dolunca yer açmanın yolu hayvanı doğaya salmak.
+- Altınla sınırsız yumurta alma ve otomatik yumurta kaldırıldı; yerine yumurta sepeti geldi (oyun 3 saatte bitiyordu). Otomatik yumurtaya harcanan altın eski kayıtlara iade edilir.
 - Otomatik yemlik ve toplu besleyen mama kabı kaldırıldı: hayvanlar tek tek, kendi yemleriyle beslenir. Yemliği almış eski kayıtlara 250 altın iade edilir.
 - Renk karışımı (saf / desenli haller) kaldırıldı: yumurta rengi hayvanı gösterir, çeşit olarak yalnızca parlak yumurta var. Eski kayıtlardaki desenliler parlak olur.
 

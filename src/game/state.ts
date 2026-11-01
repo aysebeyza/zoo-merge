@@ -4,11 +4,12 @@
 import { goldMultiplier, mixVariants, newVariant, type Variant } from './variant.ts';
 import {
   animalFor,
-  AUTO_EGG_EVERY_SEC,
   AWAY_REPORT_SEC,
+  BASKET_CAP,
+  BASKET_EVERY_SEC,
+  BASKET_START,
   BETTER_EGG_CHANCE,
   DIAMONDS_PER_NEW_ANIMAL,
-  eggPrice,
   ESCAPE_AFTER_EMPTY_SEC,
   FEED_BELOW,
   FIRST_HATCH_SEC,
@@ -71,7 +72,6 @@ export type GameState = {
   now: number;
   gold: number;
   diamonds: number;
-  eggsBought: number;
   nextId: number;
   grid: (Egg | null)[];
   incubator: (IncubatorSlot | null)[];
@@ -84,8 +84,10 @@ export type GameState = {
   awayGold: number;
   /** Her yükseltmenin seviyesi; 0, henüz alınmamış demek. */
   upgrades: Record<UpgradeId, number>;
-  /** Otomatik yumurtanın bir sonraki düşeceği an; yükseltme alınmadıysa null. */
-  nextAutoEggAt: number | null;
+  /** Yumurta sepetinde kaç yumurta var. */
+  basket: number;
+  /** Sepete en son yumurta düştüğü an; bir sonraki yumurta bundan BASKET_EVERY_SEC sonra gelir. */
+  basketFilledAt: number;
   /** Kaçan hayvanların yumurtaları; birleştirme alanı doluyken burada ("Hediye" kutusu) bekler. */
   giftBox: Egg[];
   /** Ekranda gösterilecek "... yumurtasına döndü" uyarıları (seviye numaraları). */
@@ -96,10 +98,12 @@ export type GameState = {
 
 export type GameAction =
   | { type: 'load'; state: GameState }
-  /** roll ve shinyRoll: bu tick'te otomatik yumurta düşerse "Daha iyi yumurta" ve parlak olma şansı. */
-  | { type: 'tick'; now: number; roll?: number; shinyRoll?: number }
-  /** roll: "Daha iyi yumurta" şansı, shinyRoll: parlak olma şansı; ikisi de 0 ile 1 arası rastgele sayı. */
-  | { type: 'buyEgg'; roll?: number; shinyRoll?: number }
+  | { type: 'tick'; now: number }
+  /**
+   * Sepetten bir yumurta alıp birleştirme alanına koyar. roll: "Daha iyi yumurta" şansı,
+   * shinyRoll: parlak olma şansı; ikisi de 0 ile 1 arası rastgele sayı.
+   */
+  | { type: 'takeEgg'; roll?: number; shinyRoll?: number }
   | { type: 'buyUpgrade'; id: UpgradeId }
   | { type: 'moveEgg'; from: number; to: number }
   | { type: 'incubate'; from: number; slot: number }
@@ -125,7 +129,6 @@ export function createInitialState(now: number): GameState {
     now,
     gold: START_GOLD,
     diamonds: 0,
-    eggsBought: 0,
     nextId: 1,
     grid: Array.from({ length: GRID_SIZE }, () => null),
     incubator: Array.from({ length: INCUBATOR_SLOTS }, () => null),
@@ -135,11 +138,25 @@ export function createInitialState(now: number): GameState {
     newAnimalQueue: [],
     awayGold: 0,
     upgrades: Object.fromEntries(UPGRADES.map((u) => [u.id, 0])) as Record<UpgradeId, number>,
-    nextAutoEggAt: null,
+    basket: BASKET_START,
+    basketFilledAt: now,
     giftBox: [],
     escapedQueue: [],
     food: {},
   };
+}
+
+export function basketCap(state: GameState): number {
+  return BASKET_CAP[state.upgrades.biggerBasket];
+}
+
+export function basketEveryMs(state: GameState): number {
+  return BASKET_EVERY_SEC[state.upgrades.fasterHen] * 1000;
+}
+
+/** Sepete bir sonraki yumurtanın düşeceği an; sepet doluysa null (Tavuk Anne dinleniyor). */
+export function nextBasketEggAt(state: GameState): number | null {
+  return state.basket >= basketCap(state) ? null : state.basketFilledAt + basketEveryMs(state);
 }
 
 /** Hayvanın t anındaki tokluğu, 0 ile 1 arası. */
@@ -263,19 +280,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return action.state;
 
     case 'tick':
-      return tick(state, action.now, action.roll, action.shinyRoll);
+      return tick(state, action.now);
 
-    case 'buyEgg': {
-      const price = eggPrice(state.eggsBought);
+    case 'takeEgg': {
       const cell = state.grid.indexOf(null);
-      if (state.gold < price || cell === -1) return state;
+      if (state.basket === 0 || cell === -1) return state;
       const grid = [...state.grid];
       grid[cell] = { id: state.nextId, level: newEggLevel(state, action.roll), variant: newVariant(action.shinyRoll) };
       return {
         ...state,
         grid,
-        gold: state.gold - price,
-        eggsBought: state.eggsBought + 1,
+        basket: state.basket - 1,
+        // Sepet doluyken Tavuk Anne dinleniyordu; yer açılınca sayaç şimdi başlar.
+        basketFilledAt: state.basket >= basketCap(state) ? state.now : state.basketFilledAt,
         nextId: state.nextId + 1,
       };
     }
@@ -285,8 +302,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const cost = upgradeCost(action.id, level);
       if (cost === null || state.gold < cost) return state;
       const upgrades = { ...state.upgrades, [action.id]: level + 1 };
-      let { incubator, nextAutoEggAt } = state;
+      let { incubator, basketFilledAt } = state;
       if (action.id === 'incubatorSlot') incubator = [...incubator, null];
+      // Sepet doluyken büyütülürse Tavuk Anne hemen yeniden yumurtlamaya başlar.
+      if (action.id === 'biggerBasket' && state.basket >= basketCap(state)) basketFilledAt = state.now;
       if (action.id === 'fasterIncubator') {
         // Kuluçkada bekleyen yumurtaların kalan süresi de hemen kısalır, çocuk etkiyi o anda görsün.
         const ratio = incubationFactor(level + 1) / incubationFactor(level);
@@ -298,10 +317,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           return { ...slot, durationMs: Math.round(elapsed + remaining * ratio) };
         });
       }
-      if (action.id === 'autoEgg' && nextAutoEggAt === null) {
-        nextAutoEggAt = state.now + AUTO_EGG_EVERY_SEC[1] * 1000;
-      }
-      return { ...state, gold: state.gold - cost, upgrades, incubator, nextAutoEggAt };
+      return { ...state, gold: state.gold - cost, upgrades, incubator, basketFilledAt };
     }
 
     case 'moveEgg': {
@@ -424,24 +440,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-function tick(state: GameState, now: number, roll?: number, shinyRoll?: number): GameState {
-  let { gold, diamonds, discovered, newAnimalQueue, nextId, awayGold, grid, nextAutoEggAt, giftBox, escapedQueue } =
-    state;
+function tick(state: GameState, now: number): GameState {
+  let { gold, diamonds, discovered, newAnimalQueue, nextId, awayGold, grid, giftBox, escapedQueue } = state;
   const bonus = stateIncomeBonus(state);
   const hungerMs = HUNGER_SEC * 1000;
   const maxPark = stateParkLimit(state);
 
-  // Otomatik yumurta: her tick'te en fazla bir tane. Uzun süre uzak kalındıysa alan dolana kadar
-  // art arda düşer. Alan doluysa sayaç baştan başlar, böylece birikip birden gelmez.
-  if (nextAutoEggAt !== null && now >= nextAutoEggAt) {
-    const everyMs = AUTO_EGG_EVERY_SEC[state.upgrades.autoEgg] * 1000;
-    const cell = grid.indexOf(null);
-    if (cell === -1) {
-      nextAutoEggAt = now + everyMs;
-    } else {
-      grid = [...grid];
-      grid[cell] = { id: nextId++, level: newEggLevel(state, roll), variant: newVariant(shinyRoll) };
-      nextAutoEggAt += everyMs;
+  // Yumurta sepeti: Tavuk Anne aralıklarla yumurta bırakır, oyun kapalıyken de. Sepet doluyken dinlenir;
+  // o sırada geçen süre sayılmaz, yer açılınca sayaç baştan başlar.
+  let { basket, basketFilledAt } = state;
+  const cap = basketCap(state);
+  if (basket >= cap) {
+    basketFilledAt = now;
+  } else {
+    const everyMs = basketEveryMs(state);
+    const laid = Math.floor((now - basketFilledAt) / everyMs);
+    if (laid > 0) {
+      basket = Math.min(cap, basket + laid);
+      basketFilledAt = basket >= cap ? now : basketFilledAt + laid * everyMs;
     }
   }
 
@@ -533,7 +549,8 @@ function tick(state: GameState, now: number, roll?: number, shinyRoll?: number):
     newAnimalQueue,
     nextId,
     grid,
-    nextAutoEggAt,
+    basket,
+    basketFilledAt,
     incubator,
     park,
     awayGold,

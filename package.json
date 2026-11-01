@@ -46,7 +46,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "node --test \"src/game/**/*.test.ts\" \"src/lib/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sim": "node scripts/balance-sim.ts"
   },
   "private": true
 }

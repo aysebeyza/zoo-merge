@@ -4,7 +4,9 @@ import { describe, it } from 'node:test';
 import {
   ANIMALS,
   AUTO_FEEDER_REFUND,
-  eggPrice,
+  BASKET_CAP,
+  BASKET_EVERY_SEC,
+  BASKET_START,
   foodPrice,
   ESCAPE_AFTER_EMPTY_SEC,
   FIRST_HATCH_SEC,
@@ -23,6 +25,7 @@ import {
   fullnessAt,
   hungryAt,
   missingFood,
+  nextBasketEggAt,
   gameReducer,
   goldPerSecond,
   type Egg,
@@ -67,21 +70,51 @@ describe('parlak yumurta', () => {
   });
 });
 
-describe('yumurta alma', () => {
-  it('altın düşer, yumurta ilk boş kutuya gelir', () => {
-    const state = gameReducer(createInitialState(T0), { type: 'buyEgg' });
-    assert.equal(state.gold, START_GOLD - eggPrice(0));
+describe('yumurta sepeti', () => {
+  it('sepetten alınan yumurta ilk boş kutuya gelir, altın harcanmaz', () => {
+    const state = gameReducer(createInitialState(T0), { type: 'takeEgg' });
+    assert.equal(state.gold, START_GOLD);
+    assert.equal(state.basket, BASKET_START - 1);
     assert.deepEqual(state.grid[0], egg(1, 1));
   });
 
   it('şans tutarsa alınan yumurta parlak olur', () => {
-    const state = gameReducer(createInitialState(T0), { type: 'buyEgg', shinyRoll: 0.01 });
+    const state = gameReducer(createInitialState(T0), { type: 'takeEgg', shinyRoll: 0.01 });
     assert.equal(state.grid[0]?.variant.shiny, true);
   });
 
-  it('altın yetmezse hiçbir şey olmaz', () => {
-    const poor = { ...createInitialState(T0), gold: 0 };
-    assert.equal(gameReducer(poor, { type: 'buyEgg' }), poor);
+  it('sepet boşsa ya da alan doluysa yumurta alınamaz', () => {
+    const empty = { ...createInitialState(T0), basket: 0 };
+    assert.equal(gameReducer(empty, { type: 'takeEgg' }), empty);
+    const fresh = createInitialState(T0);
+    const full = { ...fresh, grid: fresh.grid.map((_, i) => egg(200 + i, 3)) };
+    assert.equal(gameReducer(full, { type: 'takeEgg' }), full);
+  });
+
+  it('Tavuk Anne aralıklarla sepete yumurta bırakır, oyun kapalıyken de', () => {
+    const state = { ...createInitialState(T0), basket: 0 };
+    const every = BASKET_EVERY_SEC[0] * 1000;
+    assert.equal(gameReducer(state, { type: 'tick', now: T0 + every - 1 }).basket, 0);
+    assert.equal(gameReducer(state, { type: 'tick', now: T0 + every }).basket, 1);
+    assert.equal(gameReducer(state, { type: 'tick', now: T0 + 5 * every + 10 }).basket, 5);
+  });
+
+  it('sepet dolunca durur; yer açılınca sayaç baştan başlar', () => {
+    const state = { ...createInitialState(T0), basket: 0 };
+    const every = BASKET_EVERY_SEC[0] * 1000;
+    // Bir gece boyunca kapalı kaldı: sepet taşmaz.
+    const morning = gameReducer(state, { type: 'tick', now: T0 + 12 * HOUR });
+    assert.equal(morning.basket, BASKET_CAP[0]);
+    const taken = gameReducer(morning, { type: 'takeEgg' });
+    assert.equal(taken.basket, BASKET_CAP[0] - 1);
+    assert.equal(nextBasketEggAt(taken), morning.now + every);
+  });
+
+  it('Tavuk Anne ve Büyük sepet yükseltmeleri sepeti hızlandırır ve büyütür', () => {
+    const state = withUpgrades({ ...createInitialState(T0), basket: 0 }, { fasterHen: 3, biggerBasket: 3 });
+    const every = BASKET_EVERY_SEC[3] * 1000;
+    assert.equal(gameReducer(state, { type: 'tick', now: T0 + 10 * every }).basket, 10);
+    assert.equal(gameReducer(state, { type: 'tick', now: T0 + 24 * HOUR }).basket, BASKET_CAP[3]);
   });
 });
 
@@ -235,40 +268,16 @@ describe('yükseltmeler', () => {
 
   it('altın yetmezse ya da en üst seviyedeyse alınamaz', () => {
     const poor = { ...createInitialState(T0), gold: 0 };
-    assert.equal(gameReducer(poor, { type: 'buyUpgrade', id: 'autoEgg' }), poor);
-    const maxed = withUpgrades(createInitialState(T0), { autoEgg: upgradeFor('autoEgg').costs.length });
+    assert.equal(gameReducer(poor, { type: 'buyUpgrade', id: 'fasterHen' }), poor);
+    const maxed = withUpgrades(createInitialState(T0), { fasterHen: upgradeFor('fasterHen').costs.length });
     const rich = { ...maxed, gold: 1e12 };
-    assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'autoEgg' }), rich);
+    assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'fasterHen' }), rich);
   });
 
-  it('otomatik yumurta aralıklarla boş kutuya düşer, alan doluysa bekler', () => {
-    let state = withUpgrades(createInitialState(T0), { autoEgg: 1 });
-    state = gameReducer(state, { type: 'tick', now: T0 + 29_999 });
-    assert.equal(state.grid[0], null);
-    state = gameReducer(state, { type: 'tick', now: T0 + 30_000 });
-    assert.equal(state.grid[0]?.level, 1);
-
-    const full = { ...state, grid: state.grid.map((_, i) => egg(200 + i, 3)) };
-    const waited = gameReducer(full, { type: 'tick', now: T0 + 60_000 });
-    assert.equal(waited.nextAutoEggAt, T0 + 90_000);
-  });
-
-  it('uzun süre uzak kalınca otomatik yumurtalar yalnızca alan dolana kadar gelir', () => {
-    let state = withUpgrades(createInitialState(T0), { autoEgg: 3 });
-    for (let t = 1; t <= 30; t++) state = gameReducer(state, { type: 'tick', now: T0 + 60 * 60_000 + t });
-    assert.equal(state.grid.includes(null), false);
-  });
-
-  it('daha iyi yumurta, şans tutunca 2. seviyeden başlar', () => {
+  it('daha iyi yumurta, şans tutunca sepetten 2. seviye yumurta çıkar', () => {
     const state = withUpgrades(createInitialState(T0), { betterEgg: 1 });
-    assert.equal(gameReducer(state, { type: 'buyEgg', roll: 0.1 }).grid[0]?.level, 2);
-    assert.equal(gameReducer(state, { type: 'buyEgg', roll: 0.9 }).grid[0]?.level, 1);
-  });
-
-  it('daha iyi yumurta otomatik yumurtalara da uygulanır', () => {
-    const state = withUpgrades(createInitialState(T0), { autoEgg: 1, betterEgg: 3 });
-    const next = gameReducer(state, { type: 'tick', now: T0 + 30_000, roll: 0.99 });
-    assert.equal(next.grid[0]?.level, 2);
+    assert.equal(gameReducer(state, { type: 'takeEgg', roll: 0.1 }).grid[0]?.level, 2);
+    assert.equal(gameReducer(state, { type: 'takeEgg', roll: 0.9 }).grid[0]?.level, 1);
   });
 
   it('daha çok ziyaretçi altın kazancını artırır', () => {
@@ -557,11 +566,22 @@ describe('kayıt', () => {
   });
 
   it('yükseltmeler kaydedilir; eski kayıtta olmayan yükseltmeler 0 olur', () => {
-    const state = withUpgrades(createInitialState(T0), { incubatorSlot: 1, autoEgg: 2 });
+    const state = withUpgrades(createInitialState(T0), { incubatorSlot: 1, fasterHen: 2 });
     assert.deepEqual(parseSave(serializeSave(state)), state);
     const { upgrades: _, ...old } = createInitialState(T0);
     const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }));
     assert.equal(loaded?.upgrades.betterEgg, 0);
+  });
+
+  it('altınla yumurta dönemindeki kayıt: otomatik yumurta bedeli iade edilir, sepet dolu başlar', () => {
+    const fresh = createInitialState(T0);
+    const { basket: _b, basketFilledAt: _f, ...rest } = fresh;
+    const old = { ...rest, eggsBought: 120, nextAutoEggAt: T0, upgrades: { ...fresh.upgrades, autoEgg: 2 } };
+    const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }))!;
+    assert.equal(loaded.gold, fresh.gold + 150 + 2_000);
+    assert.equal(loaded.basket, BASKET_START);
+    assert.equal('eggsBought' in loaded, false);
+    assert.equal('autoEgg' in loaded.upgrades, false);
   });
 
   it('yüklenen oyun, kapalı kalınan sürenin altınını alır', () => {

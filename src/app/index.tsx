@@ -13,12 +13,14 @@ import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { Park } from '@/components/park';
 import { UpgradesPanel } from '@/components/upgrades-panel';
-import { eggPrice, GRID_COLUMNS, UPGRADES, upgradeCost } from '@/game/config';
-import { formatNumber } from '@/game/format';
+import { GRID_COLUMNS, UPGRADES, upgradeCost } from '@/game/config';
+import { formatDuration } from '@/game/format';
 import {
+  basketCap,
   canMerge,
   createInitialState,
   gameReducer,
+  nextBasketEggAt,
   parkIncomePerSecond,
   stateIncomeBonus,
   stateParkLimit,
@@ -50,7 +52,7 @@ export default function GameScreen() {
 
   useEffect(() => {
     const timer = setInterval(
-      () => dispatch({ type: 'tick', now: Date.now(), roll: Math.random(), shinyRoll: Math.random() }),
+      () => dispatch({ type: 'tick', now: Date.now() }),
       TICK_MS,
     );
     return () => clearInterval(timer);
@@ -95,9 +97,9 @@ export default function GameScreen() {
   const boardWidth = Math.min(width, MAX_BOARD_WIDTH) - 24;
   const cellSize = (boardWidth - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
-  const price = eggPrice(state.eggsBought);
   const gridFull = !state.grid.includes(null);
-  const canBuy = !gridFull && state.gold >= price;
+  const canTake = !gridFull && state.basket > 0;
+  const nextEggAt = nextBasketEggAt(state);
   const incomeBonus = stateIncomeBonus(state);
   const parkLimit = stateParkLimit(state);
   // Alınabilecek bir yükseltme varsa düğmede işaret çıkar.
@@ -180,13 +182,20 @@ export default function GameScreen() {
       </View>
 
       <View style={styles.actions}>
+        {/* Yumurta sepeti: dokununca sepetten bir yumurta alana gelir. Tavuk Anne zamanla doldurur. */}
         <Pressable
-          style={[styles.buyButton, !canBuy && styles.buyDisabled]}
-          disabled={!canBuy}
-          onPress={() => dispatch({ type: 'buyEgg', roll: Math.random(), shinyRoll: Math.random() })}>
-          <Text style={styles.buyIcon}>🥚</Text>
-          <Text style={styles.buyTitle}>{gridFull ? 'Alan dolu' : 'Yumurta'}</Text>
-          <Text style={styles.buyPrice}>🪙 {formatNumber(price)}</Text>
+          style={[styles.buyButton, !canTake && styles.buyDisabled]}
+          disabled={!canTake}
+          onPress={() => dispatch({ type: 'takeEgg', roll: Math.random(), shinyRoll: Math.random() })}>
+          <Text style={styles.buyIcon}>🧺</Text>
+          <View>
+            <Text style={styles.buyTitle}>
+              {gridFull ? 'Alan dolu' : `${state.basket}/${basketCap(state)}`}
+            </Text>
+            <Text style={styles.buyPrice}>
+              {nextEggAt === null ? 'Sepet dolu' : `🐔 ${formatDuration((nextEggAt - state.now) / 1000)}`}
+            </Text>
+          </View>
         </Pressable>
 
         <Pressable style={styles.upgradeButton} onPress={() => setUpgradesOpen(true)}>
