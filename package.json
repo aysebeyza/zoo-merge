@@ -42,7 +42,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --test \"src/game/**/*.test.ts\"",
+    "test": "node --test \"src/game/**/*.test.ts\" \"src/lib/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "private": true

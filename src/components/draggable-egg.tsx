@@ -8,8 +8,8 @@ type Props = {
   egg: Egg;
   size: number;
   onDragStart: () => void;
-  /** x, y: parmağın bırakıldığı ekran noktası. */
-  onDrop: (x: number, y: number) => void;
+  /** dx, dy: yumurtanın başladığı yerden ne kadar sürüklendiği. */
+  onDrop: (dx: number, dy: number) => void;
   onDragEnd: () => void;
 };
 
@@ -36,7 +36,7 @@ export function DraggableEgg({ egg, size, onDragStart, onDrop, onDragEnd }: Prop
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_, gesture) => {
         if (Math.abs(gesture.dx) + Math.abs(gesture.dy) > TAP_SLOP) {
-          latest.current.onDrop(gesture.moveX, gesture.moveY);
+          latest.current.onDrop(gesture.dx, gesture.dy);
         }
         reset();
       },

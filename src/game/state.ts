@@ -70,8 +70,8 @@ export type GameState = {
 
 export type GameAction =
   | { type: 'load'; state: GameState }
-  /** eggColor: bu tick'te otomatik yumurta düşerse rengi. */
-  | { type: 'tick'; now: number; eggColor?: ColorId }
+  /** eggColor ve roll: bu tick'te otomatik yumurta düşerse rengi ve "Daha iyi yumurta" şansı. */
+  | { type: 'tick'; now: number; eggColor?: ColorId; roll?: number }
   /** roll: 0 ile 1 arası rastgele sayı; "Daha iyi yumurta" şansı için. */
   | { type: 'buyEgg'; nextColor: ColorId; roll?: number }
   | { type: 'buyUpgrade'; id: UpgradeId }
@@ -126,6 +126,11 @@ export function stateParkLimit(state: GameState): number {
   return parkLimit(state.upgrades.biggerPark);
 }
 
+/** Yeni yumurtanın seviyesi: "Daha iyi yumurta" şansı tutarsa 2, yoksa 1. Satın alınan ve bedava yumurtalar için aynı. */
+function newEggLevel(state: GameState, roll = 1): number {
+  return roll < BETTER_EGG_CHANCE[state.upgrades.betterEgg] ? 2 : 1;
+}
+
 export function canMerge(a: Egg, b: Egg): boolean {
   return a.level === b.level && a.level < MAX_LEVEL;
 }
@@ -136,15 +141,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return action.state;
 
     case 'tick':
-      return tick(state, action.now, action.eggColor ?? state.nextEggColor);
+      return tick(state, action.now, action.eggColor ?? state.nextEggColor, action.roll);
 
     case 'buyEgg': {
       const price = eggPrice(state.eggsBought);
       const cell = state.grid.indexOf(null);
       if (state.gold < price || cell === -1) return state;
-      const better = (action.roll ?? 1) < BETTER_EGG_CHANCE[state.upgrades.betterEgg];
       const grid = [...state.grid];
-      grid[cell] = { id: state.nextId, level: better ? 2 : 1, variant: plainVariant(state.nextEggColor) };
+      grid[cell] = { id: state.nextId, level: newEggLevel(state, action.roll), variant: plainVariant(state.nextEggColor) };
       return {
         ...state,
         grid,
@@ -162,6 +166,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const upgrades = { ...state.upgrades, [action.id]: level + 1 };
       let { incubator, nextAutoEggAt } = state;
       if (action.id === 'incubatorSlot') incubator = [...incubator, null];
+      if (action.id === 'fasterIncubator') {
+        // Kuluçkada bekleyen yumurtaların kalan süresi de hemen kısalır, çocuk etkiyi o anda görsün.
+        const ratio = incubationFactor(level + 1) / incubationFactor(level);
+        incubator = incubator.map((slot) => {
+          if (!slot) return slot;
+          const elapsed = state.now - slot.startedAt;
+          const remaining = slot.durationMs - elapsed;
+          if (remaining <= 0) return slot;
+          return { ...slot, durationMs: Math.round(elapsed + remaining * ratio) };
+        });
+      }
       if (action.id === 'autoEgg' && nextAutoEggAt === null) {
         nextAutoEggAt = state.now + AUTO_EGG_EVERY_SEC[1] * 1000;
       }
@@ -221,7 +236,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-function tick(state: GameState, now: number, eggColor: ColorId): GameState {
+function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): GameState {
   let { gold, diamonds, discovered, newAnimalQueue, nextId, awayGold, grid, nextAutoEggAt } = state;
   const bonus = stateIncomeBonus(state);
   const maxPark = stateParkLimit(state);
@@ -235,7 +250,7 @@ function tick(state: GameState, now: number, eggColor: ColorId): GameState {
       nextAutoEggAt = now + everyMs;
     } else {
       grid = [...grid];
-      grid[cell] = { id: nextId++, level: 1, variant: plainVariant(eggColor) };
+      grid[cell] = { id: nextId++, level: newEggLevel(state, roll), variant: plainVariant(eggColor) };
       nextAutoEggAt += everyMs;
     }
   }

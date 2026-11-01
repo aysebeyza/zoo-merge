@@ -244,6 +244,12 @@ describe('yükseltmeler', () => {
     assert.equal(gameReducer(state, { type: 'buyEgg', nextColor: 'red', roll: 0.9 }).grid[0]?.level, 1);
   });
 
+  it('daha iyi yumurta otomatik yumurtalara da uygulanır', () => {
+    const state = withUpgrades(createInitialState(T0, 'red'), { autoEgg: 1, betterEgg: 3 });
+    const next = gameReducer(state, { type: 'tick', now: T0 + 30_000, roll: 0.99 });
+    assert.equal(next.grid[0]?.level, 2);
+  });
+
   it('daha çok ziyaretçi altın kazancını artırır', () => {
     const { state, hatchAt } = withChick();
     const boosted = withUpgrades(state, { moreVisitors: 5 });
@@ -258,6 +264,15 @@ describe('yükseltmeler', () => {
     state = withUpgrades(state, { fasterIncubator: 5 });
     state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
     assert.equal(state.incubator[0]?.durationMs, ANIMALS[1].incubationSec * 1000 * 0.5);
+  });
+
+  it('kuluçka makinesi alınınca kuluçkadaki yumurtanın kalan süresi de kısalır', () => {
+    let state = { ...withGrid(createInitialState(T0, 'red'), { 0: egg(1, 3) }), firstHatchDone: true };
+    state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
+    // Kedi 90 sn sürer; 30 sn geçince 60 sn kalır. %10 hızlanınca kalan süre 54 sn olur.
+    state = gameReducer(state, { type: 'tick', now: T0 + 30_000 });
+    state = withUpgrades(state, { fasterIncubator: 1 });
+    assert.equal(state.incubator[0]?.durationMs, 84_000);
   });
 
   it('yeni kuluçka yuvası ve daha büyük park kapasiteyi artırır', () => {

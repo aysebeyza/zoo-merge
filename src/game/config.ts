@@ -60,7 +60,10 @@ export type UpgradeId = 'autoEgg' | 'moreVisitors' | 'fasterIncubator' | 'incuba
 
 /** Otomatik yumurta: seviyeye göre kaç saniyede bir bedava yumurta düşer (0. seviye kapalı). */
 export const AUTO_EGG_EVERY_SEC = [0, 30, 20, 10];
-/** Daha iyi yumurta: satın alınan yumurtanın 2. seviyeden başlama şansı. */
+/**
+ * Daha iyi yumurta: yeni yumurtanın 2. seviyeden başlama şansı. Dokümanda yalnızca satın alınan
+ * yumurtalar için yazıyordu; çocuğun kafası karışmasın diye otomatik yumurtalara da uygulanıyor.
+ */
 export const BETTER_EGG_CHANCE = [0, 0.25, 0.5, 1];
 
 export function parkLimit(biggerParkLevel: number): number {

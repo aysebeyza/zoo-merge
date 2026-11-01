@@ -22,12 +22,11 @@ import {
   stateParkLimit,
 } from '@/game/state';
 import { useGameSave } from '@/hooks/use-game-save';
+import { findDropZone, type Rect } from '@/lib/drop-zone';
 
 const TICK_MS = 250;
 const MAX_BOARD_WIDTH = 480;
 const GRID_GAP = 8;
-
-type Rect = { x: number; y: number; width: number; height: number };
 
 function randomPrimary(): ColorId {
   return PRIMARY_COLORS[Math.floor(Math.random() * PRIMARY_COLORS.length)];
@@ -48,7 +47,10 @@ export default function GameScreen() {
   const { width } = useWindowDimensions();
 
   useEffect(() => {
-    const timer = setInterval(() => dispatch({ type: 'tick', now: Date.now(), eggColor: randomPrimary() }), TICK_MS);
+    const timer = setInterval(
+      () => dispatch({ type: 'tick', now: Date.now(), eggColor: randomPrimary(), roll: Math.random() }),
+      TICK_MS,
+    );
     return () => clearInterval(timer);
   }, []);
 
@@ -69,15 +71,11 @@ export default function GameScreen() {
       view.measureInWindow((x, y, w, h) => zoneRects.current.set(id, { x, y, width: w, height: h }));
     });
   };
-  const zoneAt = (x: number, y: number) => {
-    for (const [id, r] of zoneRects.current) {
-      if (x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) return id;
-    }
-    return null;
-  };
-
-  const handleDrop = (from: number, x: number, y: number) => {
-    const zone = zoneAt(x, y);
+  // Parmağın ucu değil, sürüklenen yumurtanın ortası sayılır: ekranda nereye bırakıldığı görünüyorsa oraya düşer.
+  const handleDrop = (from: number, dx: number, dy: number) => {
+    const start = zoneRects.current.get(`cell-${from}`);
+    if (!start) return;
+    const zone = findDropZone(zoneRects.current, start.x + start.width / 2 + dx, start.y + start.height / 2 + dy);
     if (!zone) return;
     const [kind, index] = zone.split('-');
     const target = Number(index);
@@ -152,7 +150,7 @@ export default function GameScreen() {
                   measureZones();
                   setDraggingFrom(i);
                 }}
-                onDrop={(x, y) => handleDrop(i, x, y)}
+                onDrop={(dx, dy) => handleDrop(i, dx, dy)}
                 onDragEnd={() => setDraggingFrom(null)}
               />
             ) : (
