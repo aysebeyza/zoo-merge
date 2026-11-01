@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AwayGoldModal } from '@/components/away-gold-modal';
 import { DraggableEgg } from '@/components/draggable-egg';
+import { EscapedModal } from '@/components/escaped-modal';
 import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
@@ -16,6 +17,8 @@ import { formatNumber } from '@/game/format';
 import {
   canMerge,
   createInitialState,
+  feedAllCost,
+  feedPlan,
   gameReducer,
   parkIncomePerSecond,
   stateIncomeBonus,
@@ -55,6 +58,7 @@ export default function GameScreen() {
   }, []);
 
   const celebrating = state.newAnimalQueue[0];
+  const escaped = state.escapedQueue[0];
   useEffect(() => {
     if (celebrating !== undefined) haptic('success');
   }, [celebrating]);
@@ -97,6 +101,8 @@ export default function GameScreen() {
   const canBuy = !gridFull && state.gold >= price;
   const incomeBonus = stateIncomeBonus(state);
   const parkLimit = stateParkLimit(state);
+  const feedCost = feedAllCost(state);
+  const canFeed = feedPlan(state).ids.length > 0;
   // Alınabilecek bir yükseltme varsa düğmede işaret çıkar.
   const upgradeReady = UPGRADES.some((u) => {
     const cost = upgradeCost(u.id, state.upgrades[u.id]);
@@ -110,14 +116,21 @@ export default function GameScreen() {
       <Hud
         gold={state.gold}
         diamonds={state.diamonds}
-        incomePerSecond={parkIncomePerSecond(state.park, incomeBonus)}
+        incomePerSecond={parkIncomePerSecond(state.park, incomeBonus, state.now)}
         parkCount={state.park.length}
         parkLimit={parkLimit}
       />
 
       <Park
         animals={state.park}
+        now={state.now}
         incomeBonus={incomeBonus}
+        feedCost={feedCost}
+        canFeed={canFeed}
+        onFeed={() => {
+          dispatch({ type: 'feedAll' });
+          haptic('success');
+        }}
         selectedId={selectedAnimal}
         onSelect={setSelectedAnimal}
         onRelease={(id) => {
@@ -178,6 +191,18 @@ export default function GameScreen() {
         </Pressable>
       </View>
 
+      {/* Kaçan hayvanların yumurtaları alan doluyken burada bekler; dokununca alana gelir. */}
+      {state.giftBox.length > 0 && (
+        <Pressable
+          style={[styles.giftButton, gridFull && styles.buyDisabled]}
+          disabled={gridFull}
+          onPress={() => dispatch({ type: 'takeGift' })}>
+          <Text style={styles.giftText}>
+            🎁 {state.giftBox.length} yumurta bekliyor{gridFull ? ' · alan dolu' : ''}
+          </Text>
+        </Pressable>
+      )}
+
       {upgradesOpen && (
         <UpgradesPanel
           gold={state.gold}
@@ -190,9 +215,15 @@ export default function GameScreen() {
         />
       )}
 
-      {/* Önce "sen yokken" altını, sonra yeni hayvan kutlamaları gösterilir. */}
+      {/* Önce "sen yokken" altını, sonra kaçan hayvanlar, sonra yeni hayvan kutlamaları gösterilir. */}
       {state.awayGold > 0 ? (
         <AwayGoldModal amount={state.awayGold} onClose={() => dispatch({ type: 'dismissAwayGold' })} />
+      ) : escaped !== undefined ? (
+        <EscapedModal
+          level={escaped}
+          inGiftBox={state.giftBox.length > 0}
+          onClose={() => dispatch({ type: 'dismissEscaped' })}
+        />
       ) : (
         celebrating !== undefined && (
           <NewAnimalModal
@@ -290,6 +321,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: 'white',
+  },
+  giftButton: {
+    alignSelf: 'center',
+    marginTop: -4,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#FFE1EC',
+    borderWidth: 2,
+    borderColor: '#FF8FB1',
+  },
+  giftText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#8A2E52',
   },
   badge: {
     position: 'absolute',

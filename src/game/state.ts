@@ -5,12 +5,17 @@ import { goldMultiplier, mixVariants, plainVariant, type ColorId, type Variant }
 import {
   animalFor,
   AUTO_EGG_EVERY_SEC,
+  AUTO_FEED_AT,
   AWAY_REPORT_SEC,
   BETTER_EGG_CHANCE,
   DIAMONDS_PER_NEW_ANIMAL,
   eggPrice,
+  ESCAPE_AFTER_EMPTY_SEC,
+  FEED_FULL_COST_SEC,
   FIRST_HATCH_SEC,
   GRID_SIZE,
+  HUNGER_SEC,
+  hungerMultiplier,
   incomeBonus,
   incubationFactor,
   INCUBATOR_SLOTS,
@@ -44,6 +49,8 @@ export type ParkAnimal = {
   /** Son altın düşürme anı; ekrandaki "+altın" baloncuğu için. */
   lastDropAt: number | null;
   lastDropAmount: number;
+  /** Son doyurulduğu an. Tokluk o anda %100'dür ve HUNGER_SEC içinde %0'a iner. */
+  fedAt: number;
 };
 
 export type GameState = {
@@ -66,6 +73,10 @@ export type GameState = {
   upgrades: Record<UpgradeId, number>;
   /** Otomatik yumurtanın bir sonraki düşeceği an; yükseltme alınmadıysa null. */
   nextAutoEggAt: number | null;
+  /** Kaçan hayvanların yumurtaları; birleştirme alanı doluyken burada ("Hediye" kutusu) bekler. */
+  giftBox: Egg[];
+  /** Ekranda gösterilecek "... yumurtasına döndü" uyarıları (seviye numaraları). */
+  escapedQueue: number[];
 };
 
 export type GameAction =
@@ -78,8 +89,13 @@ export type GameAction =
   | { type: 'moveEgg'; from: number; to: number }
   | { type: 'incubate'; from: number; slot: number }
   | { type: 'releaseAnimal'; id: number }
+  /** Mama kabı: aç hayvanları, en açtan başlayarak altın yettiği kadar doyurur. */
+  | { type: 'feedAll' }
+  /** Hediye kutusundaki ilk yumurtayı birleştirme alanına alır. */
+  | { type: 'takeGift' }
   | { type: 'dismissNewAnimal' }
-  | { type: 'dismissAwayGold' };
+  | { type: 'dismissAwayGold' }
+  | { type: 'dismissEscaped' };
 
 export function createInitialState(now: number, firstColor: ColorId): GameState {
   return {
@@ -98,7 +114,47 @@ export function createInitialState(now: number, firstColor: ColorId): GameState 
     awayGold: 0,
     upgrades: Object.fromEntries(UPGRADES.map((u) => [u.id, 0])) as Record<UpgradeId, number>,
     nextAutoEggAt: null,
+    giftBox: [],
+    escapedQueue: [],
   };
+}
+
+/** Hayvanın t anındaki tokluğu, 0 ile 1 arası. */
+export function fullnessAt(animal: { fedAt: number }, t: number): number {
+  return Math.min(1, Math.max(0, 1 - (t - animal.fedAt) / (HUNGER_SEC * 1000)));
+}
+
+/** Hayvanı t anındaki tokluğundan %100'e doyurmanın bedeli. Tok hayvan için 0. */
+export function feedCost(animal: ParkAnimal, t: number, bonus = 1): number {
+  const missing = 1 - fullnessAt(animal, t);
+  if (missing <= 0) return 0;
+  return Math.max(1, Math.ceil(missing * goldPerSecond(animal, bonus) * FEED_FULL_COST_SEC));
+}
+
+/**
+ * Mama kabına dokununca hangi hayvanların doyacağı ve toplam bedel: en açtan başlayarak altın yettiği kadar.
+ * Altının yetmediği hayvan atlanır, daha ucuz olan sıradakiler yine doyurulur.
+ */
+export function feedPlan(state: GameState): { ids: number[]; cost: number } {
+  const bonus = stateIncomeBonus(state);
+  const hungry = state.park
+    .filter((a) => fullnessAt(a, state.now) < 1)
+    .sort((a, b) => fullnessAt(a, state.now) - fullnessAt(b, state.now));
+  const ids: number[] = [];
+  let cost = 0;
+  for (const animal of hungry) {
+    const c = feedCost(animal, state.now, bonus);
+    if (cost + c > state.gold) continue;
+    ids.push(animal.id);
+    cost += c;
+  }
+  return { ids, cost };
+}
+
+/** Bütün aç hayvanları doyurmanın bedeli (altın yetmese de). Mama kabında gösterilir. */
+export function feedAllCost(state: GameState): number {
+  const bonus = stateIncomeBonus(state);
+  return state.park.reduce((sum, a) => sum + feedCost(a, state.now, bonus), 0);
 }
 
 /** bonus: "Daha çok ziyaretçi" yükseltmesinin çarpanı (incomeBonus). */
@@ -110,8 +166,13 @@ export function goldPerSecond(animal: { level: number; variant: Variant }, bonus
   return dropAmount(animal, bonus) / animalFor(animal.level).dropEverySec;
 }
 
-export function parkIncomePerSecond(park: ParkAnimal[], bonus = 1): number {
-  return park.reduce((sum, animal) => sum + goldPerSecond(animal, bonus), 0);
+/** now verilirse hayvanların o anki tokluğu da hesaba katılır. */
+export function parkIncomePerSecond(park: ParkAnimal[], bonus = 1, now?: number): number {
+  return park.reduce(
+    (sum, animal) =>
+      sum + goldPerSecond(animal, bonus) * (now === undefined ? 1 : hungerMultiplier(fullnessAt(animal, now))),
+    0,
+  );
 }
 
 export function releaseValue(animal: { level: number; variant: Variant }, bonus = 1): number {
@@ -231,14 +292,37 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'dismissNewAnimal':
       return { ...state, newAnimalQueue: state.newAnimalQueue.slice(1) };
 
+    case 'feedAll': {
+      const { ids, cost } = feedPlan(state);
+      if (ids.length === 0) return state;
+      return {
+        ...state,
+        gold: state.gold - cost,
+        park: state.park.map((a) => (ids.includes(a.id) ? { ...a, fedAt: state.now } : a)),
+      };
+    }
+
+    case 'takeGift': {
+      const cell = state.grid.indexOf(null);
+      if (state.giftBox.length === 0 || cell === -1) return state;
+      const grid = [...state.grid];
+      grid[cell] = state.giftBox[0];
+      return { ...state, grid, giftBox: state.giftBox.slice(1) };
+    }
+
     case 'dismissAwayGold':
       return { ...state, awayGold: 0 };
+
+    case 'dismissEscaped':
+      return { ...state, escapedQueue: state.escapedQueue.slice(1) };
   }
 }
 
 function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): GameState {
-  let { gold, diamonds, discovered, newAnimalQueue, nextId, awayGold, grid, nextAutoEggAt } = state;
+  let { gold, diamonds, discovered, newAnimalQueue, nextId, awayGold, grid, nextAutoEggAt, giftBox, escapedQueue } =
+    state;
   const bonus = stateIncomeBonus(state);
+  const hungerMs = HUNGER_SEC * 1000;
   const maxPark = stateParkLimit(state);
 
   // Otomatik yumurta: her tick'te en fazla bir tane. Uzun süre uzak kalındıysa alan dolana kadar
@@ -259,23 +343,62 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
   // düşürmeler birlikte sayılır, ama en fazla OFFLINE_EARNING_CAP_SEC kadarı. Sınırı aşan süre atlanır.
   const earnUntil = Math.min(now, state.now + OFFLINE_EARNING_CAP_SEC * 1000);
   const skippedMs = Math.max(0, now - earnUntil);
-  const goldBefore = gold;
+  let earned = 0;
   let park = state.park.map((animal) => {
+    // Otomatik yemlik: tokluk AUTO_FEED_AT'e indiği anda, altın yetiyorsa hayvanı doyurur.
+    // Oyun uzun süre kapalı kaldıysa aradaki beslemeler sırayla yapılır.
+    if (state.upgrades.autoFeeder > 0) {
+      let feedAt = animal.fedAt + hungerMs * (1 - AUTO_FEED_AT);
+      while (feedAt <= now) {
+        const cost = feedCost(animal, feedAt, bonus);
+        if (gold < cost) break;
+        gold -= cost;
+        animal = { ...animal, fedAt: feedAt };
+        feedAt += hungerMs * (1 - AUTO_FEED_AT);
+      }
+    }
+
     if (earnUntil < animal.nextDropAt) {
       return skippedMs > 0 ? { ...animal, nextDropAt: animal.nextDropAt + skippedMs } : animal;
     }
+    // Her düşürme, hayvanın o anki tokluğuna göre altın verir.
     const intervalMs = animalFor(animal.level).dropEverySec * 1000;
-    const drops = Math.floor((earnUntil - animal.nextDropAt) / intervalMs) + 1;
     const amount = dropAmount(animal, bonus);
-    gold += drops * amount;
+    let t = animal.nextDropAt;
+    let lastAmount = 0;
+    while (t <= earnUntil) {
+      lastAmount = Math.round(amount * hungerMultiplier(fullnessAt(animal, t)));
+      earned += lastAmount;
+      t += intervalMs;
+    }
     return {
       ...animal,
-      nextDropAt: animal.nextDropAt + drops * intervalMs + skippedMs,
-      lastDropAt: now,
-      lastDropAmount: amount,
+      nextDropAt: t + skippedMs,
+      lastDropAt: lastAmount > 0 ? now : animal.lastDropAt,
+      lastDropAmount: lastAmount > 0 ? lastAmount : animal.lastDropAmount,
     };
   });
-  if (now - state.now >= AWAY_REPORT_SEC * 1000) awayGold += gold - goldBefore;
+  gold += earned;
+  if (now - state.now >= AWAY_REPORT_SEC * 1000) awayGold += earned;
+
+  // Tokluğu %0'da ESCAPE_AFTER_EMPTY_SEC kalan hayvan kaçar ve rengini, desenini koruyarak kendi
+  // yumurtasına döner. Yumurta boş kutuya düşer; alan doluysa hediye kutusunda bekler.
+  const escapeAfterMs = hungerMs + ESCAPE_AFTER_EMPTY_SEC * 1000;
+  const escaped = park.filter((a) => now >= a.fedAt + escapeAfterMs);
+  if (escaped.length > 0) {
+    park = park.filter((a) => now < a.fedAt + escapeAfterMs);
+    for (const animal of escaped) {
+      const egg: Egg = { id: nextId++, level: animal.level, variant: animal.variant };
+      const cell = grid.indexOf(null);
+      if (cell === -1) {
+        giftBox = [...giftBox, egg];
+      } else {
+        grid = [...grid];
+        grid[cell] = egg;
+      }
+      escapedQueue = [...escapedQueue, animal.level];
+    }
+  }
 
   // Kuluçkası biten yumurtalar, parkta yer varsa hayvan olarak parka çıkar.
   const incubator = state.incubator.map((slot) => {
@@ -290,6 +413,7 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
         nextDropAt: now + animalFor(level).dropEverySec * 1000,
         lastDropAt: null,
         lastDropAmount: 0,
+        fedAt: now,
       },
     ];
     if (!discovered.includes(level)) {
@@ -313,5 +437,7 @@ function tick(state: GameState, now: number, eggColor: ColorId, roll?: number): 
     incubator,
     park,
     awayGold,
+    giftBox,
+    escapedQueue,
   };
 }

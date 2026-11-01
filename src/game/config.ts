@@ -56,7 +56,14 @@ export const RELEASE_VALUE_SEC = 60;
 // --- Yükseltmeler ---
 // Dokümanda etkiler var ama fiyatlar ve seviye sayıları yok. Aşağıdakiler öneri; testlerde ayarlanacak.
 
-export type UpgradeId = 'autoEgg' | 'moreVisitors' | 'fasterIncubator' | 'incubatorSlot' | 'betterEgg' | 'biggerPark';
+export type UpgradeId =
+  | 'autoEgg'
+  | 'autoFeeder'
+  | 'moreVisitors'
+  | 'fasterIncubator'
+  | 'incubatorSlot'
+  | 'betterEgg'
+  | 'biggerPark';
 
 /** Otomatik yumurta: seviyeye göre kaç saniyede bir bedava yumurta düşer (0. seviye kapalı). */
 export const AUTO_EGG_EVERY_SEC = [0, 30, 20, 10];
@@ -101,6 +108,14 @@ export const UPGRADES: readonly UpgradeConfig[] = [
     emoji: '🥚',
     costs: [150, 2_000, 20_000],
     effect: (level) => (level === 0 ? 'Kapalı' : `${AUTO_EGG_EVERY_SEC[level]} sn'de 1 bedava yumurta`),
+  },
+  {
+    id: 'autoFeeder',
+    name: 'Otomatik yemlik',
+    emoji: '🥣',
+    // Doküman: çocuk okuldayken ya da uyurken hayvanı kaçmasın diye erken ve ucuz açılmalı.
+    costs: [250],
+    effect: (level) => (level === 0 ? 'Kapalı' : 'Acıkan hayvanları kendisi besler'),
   },
   {
     id: 'moreVisitors',
@@ -153,6 +168,37 @@ export function upgradeFor(id: UpgradeId): UpgradeConfig {
 /** Bir sonraki seviyenin bedeli; en üst seviyedeyse null. */
 export function upgradeCost(id: UpgradeId, currentLevel: number): number | null {
   return upgradeFor(id).costs[currentLevel] ?? null;
+}
+
+// --- Besleme ---
+// Dokümanda tokluk aralıkları var ama süreler ve fiyat yok. Aşağıdakiler öneri; testlerde ayarlanacak.
+
+/** Tokluğun %100'den %0'a inmesi. Bütün hayvanlar aynı hızda acıkır. */
+export const HUNGER_SEC = 4 * 60 * 60;
+/** Tokluk %0'a indikten sonra hayvanın kaçması. Bütün hayvanlar için aynı. */
+export const ESCAPE_AFTER_EMPTY_SEC = 8 * 60 * 60;
+/** Bir hayvanı %0'dan %100'e doyurmanın bedeli: hayvanın bu kadar saniyelik kazancı. */
+export const FEED_FULL_COST_SEC = 10 * 60;
+/** Otomatik yemlik, tokluk bu orana inince hayvanı besler. */
+export const AUTO_FEED_AT = 0.5;
+
+export type Mood = 'happy' | 'hungry' | 'sad' | 'leaving';
+
+/** Dokümandaki tokluk tablosu. */
+export function moodFor(fullness: number): Mood {
+  if (fullness >= 0.5) return 'happy';
+  if (fullness >= 0.2) return 'hungry';
+  if (fullness > 0) return 'sad';
+  return 'leaving';
+}
+
+/** Tokluğa göre kazanç: tam, yarı yarıya, çok az, hiç. */
+export function hungerMultiplier(fullness: number): number {
+  const mood = moodFor(fullness);
+  if (mood === 'happy') return 1;
+  if (mood === 'hungry') return 0.5;
+  if (mood === 'sad') return 0.1;
+  return 0;
 }
 
 /** Oyun kapalıyken en fazla 2 saat boyunca altın birikir. */

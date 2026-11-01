@@ -1,18 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { COLOR_HEX } from '@/game/colors';
-import { animalFor } from '@/game/config';
+import { animalFor, hungerMultiplier, moodFor, type Mood } from '@/game/config';
 import { formatNumber } from '@/game/format';
-import { goldPerSecond, releaseValue, type ParkAnimal } from '@/game/state';
+import { fullnessAt, goldPerSecond, releaseValue, type ParkAnimal } from '@/game/state';
 
 type Props = {
   animals: ParkAnimal[];
+  now: number;
   /** "Daha çok ziyaretçi" yükseltmesinin kazanç çarpanı. */
   incomeBonus: number;
+  /** Bütün aç hayvanları doyurmanın bedeli; 0 ise herkes tok. */
+  feedCost: number;
+  canFeed: boolean;
+  onFeed: () => void;
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onRelease: (id: number) => void;
+};
+
+/** Hayvanın başının üstünde ruh haline göre çıkan işaret. */
+const MOOD_BUBBLE: Record<Mood, string | null> = {
+  happy: null,
+  hungry: '🍖',
+  sad: '😢',
+  leaving: '😭',
+};
+
+const FULLNESS_COLOR: Record<Mood, string> = {
+  happy: '#5CC85C',
+  hungry: '#FFB020',
+  sad: '#FF7A45',
+  leaving: '#FF4D4D',
 };
 
 const DECORATIONS = [
@@ -23,9 +43,20 @@ const DECORATIONS = [
   { emoji: '🪨', top: '48%', left: '90%' },
 ] as const;
 
-export function Park({ animals, incomeBonus, selectedId, onSelect, onRelease }: Props) {
+export function Park({
+  animals,
+  now,
+  incomeBonus,
+  feedCost,
+  canFeed,
+  onFeed,
+  selectedId,
+  onSelect,
+  onRelease,
+}: Props) {
   const [area, setArea] = useState({ width: 0, height: 0 });
   const selected = animals.find((a) => a.id === selectedId) ?? null;
+  const selectedFullness = selected ? fullnessAt(selected, now) : 0;
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -49,17 +80,40 @@ export function Park({ animals, incomeBonus, selectedId, onSelect, onRelease }: 
           <WanderingAnimal
             key={animal.id}
             animal={animal}
+            mood={moodFor(fullnessAt(animal, now))}
             area={area}
             selected={animal.id === selectedId}
             onPress={() => onSelect(animal.id === selectedId ? null : animal.id)}
           />
         ))}
 
+      {animals.length > 0 && (
+        <Pressable style={[styles.bowl, !canFeed && styles.bowlDisabled]} disabled={!canFeed} onPress={onFeed}>
+          <Text style={styles.bowlIcon}>🥣</Text>
+          <Text style={styles.bowlText}>{feedCost > 0 ? `Besle 🪙 ${formatNumber(feedCost)}` : 'Herkes tok'}</Text>
+        </Pressable>
+      )}
+
       {selected && (
         <View style={styles.panel}>
-          <Text style={styles.panelText}>
-            {animalFor(selected.level).emoji} {animalFor(selected.level).name} · {formatNumber(goldPerSecond(selected, incomeBonus))}/sn
-          </Text>
+          <View style={styles.panelInfo}>
+            <Text style={styles.panelText}>
+              {animalFor(selected.level).emoji} {animalFor(selected.level).name} ·{' '}
+              {formatNumber(goldPerSecond(selected, incomeBonus) * hungerMultiplier(selectedFullness))}/sn
+            </Text>
+            {/* Tokluk çubuğu: yeşil tok, sarı acıkmış, turuncu üzgün, kırmızı kaçmak üzere. */}
+            <View style={styles.fullnessBar}>
+              <View
+                style={[
+                  styles.fullnessFill,
+                  {
+                    width: `${Math.max(4, selectedFullness * 100)}%`,
+                    backgroundColor: FULLNESS_COLOR[moodFor(selectedFullness)],
+                  },
+                ]}
+              />
+            </View>
+          </View>
           <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
             <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected, incomeBonus))} 🪙</Text>
           </Pressable>
@@ -71,14 +125,19 @@ export function Park({ animals, incomeBonus, selectedId, onSelect, onRelease }: 
 
 type WanderingProps = {
   animal: ParkAnimal;
+  mood: Mood;
   area: { width: number; height: number };
   selected: boolean;
   onPress: () => void;
 };
 
-function WanderingAnimal({ animal, area, selected, onPress }: WanderingProps) {
+function WanderingAnimal({ animal, mood, area, selected, onPress }: WanderingProps) {
   const size = 34 + animal.level * 3;
   const [position] = useState(() => new Animated.ValueXY());
+  const placed = useRef(false);
+  // Dokümana göre: mutlu hayvan oynar, acıkmış hayvan yavaş yürür, üzgün hayvan köşede oturur.
+  const still = mood === 'sad' || mood === 'leaving';
+  const pace = mood === 'hungry' ? 2.5 : 1;
 
   useEffect(() => {
     const maxX = Math.max(0, area.width - size);
@@ -86,32 +145,52 @@ function WanderingAnimal({ animal, area, selected, onPress }: WanderingProps) {
     const randomPoint = () => ({ x: Math.random() * maxX, y: Math.random() * maxY });
     let alive = true;
 
+    // İlk yer bir kez seçilir; ruh hali değişince hayvan bulunduğu yerden devam eder.
+    if (!placed.current) {
+      position.setValue(randomPoint());
+      placed.current = true;
+    }
+    if (still) {
+      // Üzgün hayvan en yakın köşeye yürür ve orada oturur.
+      position.stopAnimation(({ x, y }) => {
+        Animated.timing(position, {
+          toValue: { x: x < maxX / 2 ? 0 : maxX, y: y < maxY / 2 ? 0 : maxY },
+          duration: 4000,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }).start();
+      });
+      return () => position.stopAnimation();
+    }
+
     const walk = () => {
       if (!alive) return;
       Animated.sequence([
         Animated.timing(position, {
           toValue: randomPoint(),
-          duration: 2500 + Math.random() * 2500,
+          duration: (2500 + Math.random() * 2500) * pace,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.delay(600 + Math.random() * 1800),
+        Animated.delay((600 + Math.random() * 1800) * pace),
       ]).start(({ finished }) => finished && walk());
     };
 
-    position.setValue(randomPoint());
     walk();
     return () => {
       alive = false;
       position.stopAnimation();
     };
-  }, [area.width, area.height, size, position]);
+  }, [area.width, area.height, size, position, still, pace]);
+
+  const bubble = MOOD_BUBBLE[mood];
 
   return (
     <Animated.View style={[styles.animal, { transform: position.getTranslateTransform() }]}>
       <Pressable onPress={onPress} hitSlop={8} style={{ alignItems: 'center' }}>
         {animal.lastDropAt !== null && <CoinPop key={animal.lastDropAt} amount={animal.lastDropAmount} />}
-        <Text style={{ fontSize: size }}>{animalFor(animal.level).emoji}</Text>
+        {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
+        <Text style={{ fontSize: size, opacity: mood === 'leaving' ? 0.6 : 1 }}>{animalFor(animal.level).emoji}</Text>
         <View
           style={[
             styles.groundMark,
@@ -208,10 +287,54 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  panelText: {
+  panelInfo: {
     flexShrink: 1,
+    gap: 6,
+  },
+  panelText: {
     fontSize: 15,
     fontWeight: '700',
+    color: '#5B3A1E',
+  },
+  fullnessBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(91,58,30,0.15)',
+    overflow: 'hidden',
+  },
+  fullnessFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  moodBubble: {
+    position: 'absolute',
+    top: -20,
+    right: -12,
+    fontSize: 18,
+  },
+  bowl: {
+    position: 'absolute',
+    top: 8,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,248,232,0.95)',
+    borderWidth: 2,
+    borderColor: '#F2B84B',
+  },
+  bowlDisabled: {
+    opacity: 0.6,
+  },
+  bowlIcon: {
+    fontSize: 20,
+  },
+  bowlText: {
+    fontSize: 14,
+    fontWeight: '800',
     color: '#5B3A1E',
   },
   releaseButton: {

@@ -5,7 +5,9 @@ import { mixVariants, plainVariant } from './colors.ts';
 import {
   ANIMALS,
   eggPrice,
+  ESCAPE_AFTER_EMPTY_SEC,
   FIRST_HATCH_SEC,
+  HUNGER_SEC,
   OFFLINE_EARNING_CAP_SEC,
   PARK_LIMIT,
   START_GOLD,
@@ -14,7 +16,14 @@ import {
 } from './config.ts';
 import { formatDuration, formatNumber } from './format.ts';
 import { parseSave, SAVE_VERSION, serializeSave } from './save.ts';
-import { createInitialState, gameReducer, type Egg, type GameState } from './state.ts';
+import {
+  createInitialState,
+  feedAllCost,
+  fullnessAt,
+  gameReducer,
+  type Egg,
+  type GameState,
+} from './state.ts';
 
 const T0 = 1_000_000;
 
@@ -121,6 +130,7 @@ describe('kuluçka ve park', () => {
       nextDropAt: Infinity,
       lastDropAt: null,
       lastDropAmount: 0,
+      fedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT);
@@ -177,9 +187,11 @@ describe('oyun kapalıyken', () => {
     const { state, hatchAt } = withChick();
     const away = hatchAt + 5 * 60 * 60_000;
     const back = gameReducer(state, { type: 'tick', now: away });
+    // Civciv ilk 2 saatte tok (%50'nin üstünde), saniyede 1 altın.
     assert.equal(back.gold - state.gold, OFFLINE_EARNING_CAP_SEC);
-    const later = gameReducer(back, { type: 'tick', now: away + 2000 });
-    assert.equal(later.gold - back.gold, 2);
+    const fed = gameReducer({ ...back, gold: 1e6 }, { type: 'feedAll' });
+    const later = gameReducer(fed, { type: 'tick', now: away + 2000 });
+    assert.equal(later.gold - fed.gold, 2);
   });
 
   it('kuluçka oyun kapalıyken de sürer', () => {
@@ -287,9 +299,116 @@ describe('yükseltmeler', () => {
       nextDropAt: Infinity,
       lastDropAt: null,
       lastDropAmount: 0,
+      fedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT + 1);
+  });
+});
+
+const HOUR = 60 * 60_000;
+
+describe('besleme', () => {
+  it('yeni çıkan hayvan toktur, zamanla acıkır', () => {
+    const { state, hatchAt } = withChick();
+    const animal = state.park[0];
+    assert.equal(fullnessAt(animal, hatchAt), 1);
+    assert.equal(fullnessAt(animal, hatchAt + HUNGER_SEC * 500), 0.5);
+    assert.equal(fullnessAt(animal, hatchAt + HUNGER_SEC * 2000), 0);
+  });
+
+  it('acıkmış hayvan yarı, üzgün hayvan çok az, tokluğu bitmiş hayvan hiç altın vermez', () => {
+    const { state, hatchAt } = withChick();
+    // Köpek seviyesinde bir hayvan: 3 saniyede 36 altın. Küçük sayılarda yuvarlama karıştırmasın.
+    const dog = { ...state.park[0], level: 4, nextDropAt: hatchAt + 3000 };
+    const at = (fullness: number) => {
+      const fedAt = hatchAt + 3000 - (1 - fullness) * HUNGER_SEC * 1000;
+      const s = gameReducer({ ...state, park: [{ ...dog, fedAt }] }, { type: 'tick', now: hatchAt + 3000 });
+      return s.gold - state.gold;
+    };
+    assert.equal(at(0.8), 36);
+    assert.equal(at(0.3), 18);
+    assert.equal(at(0.1), 4);
+    assert.equal(at(0), 0);
+  });
+
+  it('mama kabı aç hayvanları doyurur ve altın düşer', () => {
+    const { state, hatchAt } = withChick();
+    const hungry = gameReducer({ ...state, gold: 1000 }, { type: 'tick', now: hatchAt + HUNGER_SEC * 500 });
+    const cost = feedAllCost(hungry);
+    // Yarı aç civciv: 10 dakikalık kazancın yarısı = 300 altın.
+    assert.equal(cost, 300);
+    const fed = gameReducer(hungry, { type: 'feedAll' });
+    assert.equal(fed.gold, hungry.gold - cost);
+    assert.equal(fullnessAt(fed.park[0], fed.now), 1);
+  });
+
+  it('altın hepsine yetmezse en aç hayvandan başlar', () => {
+    const { state, hatchAt } = withChick();
+    const now = hatchAt + 3 * HOUR;
+    const park = [
+      { ...state.park[0], id: 1, fedAt: now - 1 * HOUR },
+      { ...state.park[0], id: 2, fedAt: now - 3 * HOUR },
+    ];
+    const s = { ...state, now, park, gold: 500 };
+    const fed = gameReducer(s, { type: 'feedAll' });
+    assert.equal(fullnessAt(fed.park.find((a) => a.id === 2)!, now), 1);
+    assert.notEqual(fullnessAt(fed.park.find((a) => a.id === 1)!, now), 1);
+  });
+
+  it('altının yetmediği hayvan atlanır, daha ucuz aç hayvan yine doyar', () => {
+    const { state, hatchAt } = withChick();
+    const now = hatchAt + 3 * HOUR;
+    const park = [
+      // Panda çok aç ve doyurması pahalı; civciv az aç ve ucuz.
+      { ...state.park[0], id: 1, level: 5, fedAt: now - 3 * HOUR },
+      { ...state.park[0], id: 2, fedAt: now - 1 * HOUR },
+    ];
+    const fed = gameReducer({ ...state, now, park, gold: 500 }, { type: 'feedAll' });
+    assert.notEqual(fullnessAt(fed.park.find((a) => a.id === 1)!, now), 1);
+    assert.equal(fullnessAt(fed.park.find((a) => a.id === 2)!, now), 1);
+  });
+
+  it('uzun süre aç kalan hayvan kaçar ve rengini koruyarak yumurtasına döner', () => {
+    const { state, hatchAt } = withChick();
+    const purple = { ...state.park[0], variant: plainVariant('purple') };
+    const escapeAt = hatchAt + (HUNGER_SEC + ESCAPE_AFTER_EMPTY_SEC) * 1000;
+    const before = gameReducer({ ...state, park: [purple] }, { type: 'tick', now: escapeAt - 1 });
+    assert.equal(before.park.length, 1);
+    const after = gameReducer(before, { type: 'tick', now: escapeAt });
+    assert.equal(after.park.length, 0);
+    assert.equal(after.grid[0]?.level, 1);
+    assert.equal(after.grid[0]?.variant.color, 'purple');
+    assert.deepEqual(after.escapedQueue, [1]);
+  });
+
+  it('alan doluysa kaçan hayvanın yumurtası hediye kutusunda bekler', () => {
+    const { state, hatchAt } = withChick();
+    const full = { ...state, grid: state.grid.map((_, i) => egg(200 + i, 3)) };
+    const escapeAt = hatchAt + (HUNGER_SEC + ESCAPE_AFTER_EMPTY_SEC) * 1000;
+    let s = gameReducer(full, { type: 'tick', now: escapeAt });
+    assert.equal(s.giftBox.length, 1);
+    assert.equal(gameReducer(s, { type: 'takeGift' }), s);
+    s = { ...s, grid: s.grid.map((e, i) => (i === 5 ? null : e)) };
+    s = gameReducer(s, { type: 'takeGift' });
+    assert.equal(s.giftBox.length, 0);
+    assert.equal(s.grid[5]?.level, 1);
+  });
+
+  it('otomatik yemlik altın yettikçe hayvanı besler, oyun kapalıyken de', () => {
+    const { state, hatchAt } = withChick();
+    const s = { ...withUpgrades(state, { autoFeeder: 1 }), gold: 10_000 };
+    const later = gameReducer(s, { type: 'tick', now: hatchAt + 24 * HOUR });
+    assert.equal(later.park.length, 1);
+    assert.ok(fullnessAt(later.park[0], later.now) >= 0.5);
+    assert.ok(later.gold < s.gold + OFFLINE_EARNING_CAP_SEC);
+  });
+
+  it('otomatik yemlik altın yoksa besleyemez', () => {
+    const { state, hatchAt } = withChick();
+    const s = { ...withUpgrades(state, { autoFeeder: 1 }), gold: 0 };
+    const later = gameReducer(s, { type: 'tick', now: hatchAt + 24 * HOUR });
+    assert.equal(later.park.length, 0);
   });
 });
 

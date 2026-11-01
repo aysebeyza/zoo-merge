@@ -43,8 +43,9 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - "Yeni hayvan!" kutlaması ve elmas ödülü
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
-- 6 yükseltme: otomatik yumurta, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
+- 7 yükseltme: otomatik yumurta, otomatik yemlik, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
+- Besleme: tokluk zamanla azalır, aç hayvan daha az kazanır; mama kabı (🥣) altınla doyurur. Uzun süre aç kalan hayvan kendi yumurtasına döner; alan doluysa yumurta hediye kutusunda (🎁) bekler.
 
-Henüz olmayanlar: besleme (ve "Otomatik yemlik" yükseltmesi), yetenekler, koleksiyon defteri, reklamlar.
+Henüz olmayanlar: yetenekler, koleksiyon defteri, reklamlar.
 
-Yükseltme fiyatları ve seviye sayıları dokümanda yoktu; `src/game/config.ts` içindeki değerler öneridir, testlerde ayarlanacak.
+Yükseltme fiyatları, seviye sayıları ve besleme süreleriyle mama fiyatı dokümanda yoktu; `src/game/config.ts` içindeki değerler öneridir, testlerde ayarlanacak.
