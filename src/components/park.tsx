@@ -36,6 +36,22 @@ function skillReady(animal: ParkAnimal, now: number, gold: number, bonus: number
   return unlockAt !== null && cost !== null && now >= unlockAt && gold >= cost;
 }
 
+/** Üzgün ve kaçmak üzere olan hayvan gezmez, oturur. */
+function isStill(mood: Mood): boolean {
+  return mood === 'sad' || mood === 'leaving';
+}
+
+/** Hayvanların parkın kenarından uzaklığı; başlarındaki işaret ve altlarındaki çubuk kesilmesin. */
+const PARK_MARGIN = 8;
+const BUBBLE_ROOM = 22;
+/** Altta yan yana oturan hayvanlar arasındaki en büyük mesafe. */
+const REST_STEP = 58;
+
+/** Hayvanın ekrandaki yüksekliği: emoji, renk izi ve tokluk çubuğu. */
+function animalHeight(size: number): number {
+  return size * 1.25 + 14;
+}
+
 /** Hayvanın başının üstünde ruh haline göre çıkan işaret. */
 const MOOD_BUBBLE: Record<Mood, string | null> = {
   happy: null,
@@ -76,6 +92,11 @@ export function Park({
   const selected = animals.find((a) => a.id === selectedId) ?? null;
   const selectedFullness = selected ? fullnessAt(selected, now) : 0;
 
+  // Üzgün hayvanlar parkın altında yan yana oturur; köşeye sıkışınca başlarındaki işaret görünmüyordu.
+  const resting = animals.filter((a) => isStill(moodFor(fullnessAt(a, now))));
+  const restStep = Math.min(REST_STEP, (area.width - 2 * PARK_MARGIN - REST_STEP) / Math.max(1, resting.length - 1));
+  const restingX = new Map(resting.map((a, i) => [a.id, PARK_MARGIN + i * restStep]));
+
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setArea({ width, height });
@@ -99,6 +120,7 @@ export function Park({
             key={animal.id}
             animal={animal}
             fullness={fullnessAt(animal, now)}
+            restX={restingX.get(animal.id) ?? null}
             skillReady={skillReady(animal, now, gold, incomeBonus)}
             area={area}
             selected={animal.id === selectedId}
@@ -192,6 +214,8 @@ function SkillButton({ animal, now, gold, bonus, onPress }: SkillButtonProps) {
 type WanderingProps = {
   animal: ParkAnimal;
   fullness: number;
+  /** Üzgünse altta oturacağı yerin x'i; gezen hayvan için null. */
+  restX: number | null;
   /** Yetenek şimdi geliştirilebiliyorsa hayvanın üstünde küçük bir yıldız çıkar. */
   skillReady: boolean;
   area: { width: number; height: number };
@@ -199,19 +223,23 @@ type WanderingProps = {
   onPress: () => void;
 };
 
-function WanderingAnimal({ animal, fullness, skillReady, area, selected, onPress }: WanderingProps) {
+function WanderingAnimal({ animal, fullness, restX, skillReady, area, selected, onPress }: WanderingProps) {
   const size = 34 + animal.level * 3;
   const mood = moodFor(fullness);
   const [position] = useState(() => new Animated.ValueXY());
   const placed = useRef(false);
-  // Dokümana göre: mutlu hayvan oynar, acıkmış hayvan yavaş yürür, üzgün hayvan köşede oturur.
-  const still = mood === 'sad' || mood === 'leaving';
+  // Dokümana göre: mutlu hayvan oynar, acıkmış hayvan yavaş yürür, üzgün hayvan oturur.
   const pace = mood === 'hungry' ? 2.5 : 1;
 
   useEffect(() => {
-    const maxX = Math.max(0, area.width - size);
-    const maxY = Math.max(0, area.height - size - 8);
-    const randomPoint = () => ({ x: Math.random() * maxX, y: Math.random() * maxY });
+    // Hayvan, başındaki işaret ve altındaki çubuk parkın içinde kalacak şekilde gezer.
+    const minY = BUBBLE_ROOM;
+    const maxX = Math.max(PARK_MARGIN, area.width - size - PARK_MARGIN);
+    const maxY = Math.max(minY, area.height - animalHeight(size) - PARK_MARGIN);
+    const randomPoint = () => ({
+      x: PARK_MARGIN + Math.random() * (maxX - PARK_MARGIN),
+      y: minY + Math.random() * (maxY - minY),
+    });
     let alive = true;
 
     // İlk yer bir kez seçilir; ruh hali değişince hayvan bulunduğu yerden devam eder.
@@ -219,12 +247,12 @@ function WanderingAnimal({ animal, fullness, skillReady, area, selected, onPress
       position.setValue(randomPoint());
       placed.current = true;
     }
-    if (still) {
-      // Üzgün hayvan en yakın köşeye yürür ve orada oturur.
-      position.stopAnimation(({ x, y }) => {
+    if (restX !== null) {
+      // Üzgün hayvan parkın altına yürür ve diğer üzgün hayvanların yanına oturur.
+      position.stopAnimation(() => {
         Animated.timing(position, {
-          toValue: { x: x < maxX / 2 ? 0 : maxX, y: y < maxY / 2 ? 0 : maxY },
-          duration: 4000,
+          toValue: { x: restX, y: maxY },
+          duration: 3000,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }).start();
@@ -250,7 +278,7 @@ function WanderingAnimal({ animal, fullness, skillReady, area, selected, onPress
       alive = false;
       position.stopAnimation();
     };
-  }, [area.width, area.height, size, position, still, pace]);
+  }, [area.width, area.height, size, position, restX, pace]);
 
   const bubble = MOOD_BUBBLE[mood];
 

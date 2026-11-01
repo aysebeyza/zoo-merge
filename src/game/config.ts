@@ -208,10 +208,21 @@ export function skillMultiplier(level: number, skill: number): number {
 // --- Besleme ---
 // Dokümanda tokluk aralıkları var ama süreler ve fiyat yok. Aşağıdakiler öneri; testlerde ayarlanacak.
 
+/**
+ * Beslemeyi hızlı denemek için: proje klasöründeki .env.local dosyasına EXPO_PUBLIC_FAST_HUNGER=1
+ * yazılır ve Expo sunucusu yeniden başlatılır. O zaman hayvan 5 dk'da acıkır, 10 dk'da üzülür,
+ * 15 dk'da tokluğu biter ve 5 dk sonra kaçar. .env.local Git'e girmediği için testlerde ve
+ * telefona kurulan APK'da her zaman gerçek süreler geçerlidir.
+ */
+const FAST_HUNGER = process.env.EXPO_PUBLIC_FAST_HUNGER === '1';
+
 /** Tokluğun %100'den %0'a inmesi. Bütün hayvanlar aynı hızda acıkır. */
-export const HUNGER_SEC = 4 * 60 * 60;
+export const HUNGER_SEC = FAST_HUNGER ? 15 * 60 : 4 * 60 * 60;
 /** Tokluk %0'a indikten sonra hayvanın kaçması. Bütün hayvanlar için aynı. */
-export const ESCAPE_AFTER_EMPTY_SEC = 8 * 60 * 60;
+export const ESCAPE_AFTER_EMPTY_SEC = FAST_HUNGER ? 5 * 60 : 8 * 60 * 60;
+/** Dokümandaki tokluk sınırları: %50'nin altında acıkmış, %20'nin altında üzgün. */
+const HUNGRY_BELOW = FAST_HUNGER ? 2 / 3 : 0.5;
+const SAD_BELOW = FAST_HUNGER ? 1 / 3 : 0.2;
 /** Bir hayvanı %0'dan %100'e doyurmanın bedeli: hayvanın bu kadar saniyelik kazancı. */
 export const FEED_FULL_COST_SEC = 10 * 60;
 /** Otomatik yemlik, tokluk bu orana inince hayvanı besler. */
@@ -221,8 +232,8 @@ export type Mood = 'happy' | 'hungry' | 'sad' | 'leaving';
 
 /** Dokümandaki tokluk tablosu. */
 export function moodFor(fullness: number): Mood {
-  if (fullness >= 0.5) return 'happy';
-  if (fullness >= 0.2) return 'hungry';
+  if (fullness >= HUNGRY_BELOW) return 'happy';
+  if (fullness >= SAD_BELOW) return 'hungry';
   if (fullness > 0) return 'sad';
   return 'leaving';
 }

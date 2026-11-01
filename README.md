@@ -50,4 +50,8 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 
 Henüz olmayanlar: koleksiyon defteri, parkta birleştirme, reklamlar.
 
+## Sonra yapılacaklar
+
+- Hayvan görselleri: emojiler yerine gerçek çizimler; tokluğa göre farklı yüz ifadeleri (mutlu, acıkmış, üzgün).
+
 Yükseltme fiyatları, seviye sayıları ve besleme süreleriyle mama fiyatı dokümanda yoktu; `src/game/config.ts` içindeki değerler öneridir, testlerde ayarlanacak.
