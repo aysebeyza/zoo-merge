@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState, type Dispatch } from 'react';
 import { AppState } from 'react-native';
 
-import { PRIMARY_COLORS } from '@/game/colors';
 import { parseSave, serializeSave } from '@/game/save';
 import type { GameAction, GameState } from '@/game/state';
 
@@ -27,7 +26,7 @@ export function useGameSave(state: GameState, dispatch: Dispatch<GameAction>): b
       .catch(() => null)
       .then((json) => {
         if (cancelled) return;
-        const saved = parseSave(json, PRIMARY_COLORS[0]);
+        const saved = parseSave(json);
         if (saved) dispatch({ type: 'load', state: saved });
         setLoaded(true);
       });

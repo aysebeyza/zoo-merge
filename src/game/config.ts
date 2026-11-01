@@ -10,20 +10,32 @@ export type AnimalConfig = {
   dropAmount: number;
   /** Kuluçka süresi, saniye. */
   incubationSec: number;
+  /** Yumurtanın rengi: her hayvanın yumurtası hep aynı renktir, çocuk rengine bakıp eşleşeni bulur. */
+  eggColor: string;
+  /** Hayvanın kendi yemi; yem dükkanından alınır, bir tanesi hayvanı tamamen doyurur. */
+  food: { emoji: string; name: string };
 };
 
+// prettier-ignore
 export const ANIMALS: readonly AnimalConfig[] = [
-  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 2, dropAmount: 2, incubationSec: 10 },
-  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 2, dropAmount: 5, incubationSec: 30 },
-  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 2, dropAmount: 11, incubationSec: 90 },
-  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 3, dropAmount: 36, incubationSec: 4 * 60 },
-  { level: 5, name: 'Panda', emoji: '🐼', dropEverySec: 3, dropAmount: 80, incubationSec: 8 * 60 },
-  { level: 6, name: 'Penguen', emoji: '🐧', dropEverySec: 3, dropAmount: 180, incubationSec: 15 * 60 },
-  { level: 7, name: 'Zürafa', emoji: '🦒', dropEverySec: 4, dropAmount: 540, incubationSec: 30 * 60 },
-  { level: 8, name: 'Fil', emoji: '🐘', dropEverySec: 4, dropAmount: 1200, incubationSec: 60 * 60 },
-  { level: 9, name: 'Aslan', emoji: '🦁', dropEverySec: 4, dropAmount: 2700, incubationSec: 2 * 60 * 60 },
-  { level: 10, name: 'Ejderha', emoji: '🐉', dropEverySec: 5, dropAmount: 7500, incubationSec: 4 * 60 * 60 },
+  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 2, dropAmount: 2, incubationSec: 10, eggColor: '#FFD93D', food: { emoji: '🌾', name: 'Tohum' } },
+  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 2, dropAmount: 5, incubationSec: 30, eggColor: '#FF9EC4', food: { emoji: '🥕', name: 'Havuç' } },
+  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 2, dropAmount: 11, incubationSec: 90, eggColor: '#FF9F45', food: { emoji: '🐟', name: 'Balık' } },
+  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 3, dropAmount: 36, incubationSec: 4 * 60, eggColor: '#C68B59', food: { emoji: '🦴', name: 'Kemik' } },
+  { level: 5, name: 'Panda', emoji: '🐼', dropEverySec: 3, dropAmount: 80, incubationSec: 8 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
+  { level: 6, name: 'Penguen', emoji: '🐧', dropEverySec: 3, dropAmount: 180, incubationSec: 15 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
+  { level: 7, name: 'Zürafa', emoji: '🦒', dropEverySec: 4, dropAmount: 540, incubationSec: 30 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
+  { level: 8, name: 'Fil', emoji: '🐘', dropEverySec: 4, dropAmount: 1200, incubationSec: 60 * 60, eggColor: '#B983FF', food: { emoji: '🍌', name: 'Muz' } },
+  { level: 9, name: 'Aslan', emoji: '🦁', dropEverySec: 4, dropAmount: 2700, incubationSec: 2 * 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥩', name: 'Et' } },
+  { level: 10, name: 'Ejderha', emoji: '🐉', dropEverySec: 5, dropAmount: 7500, incubationSec: 4 * 60 * 60, eggColor: '#2EC4B6', food: { emoji: '🌶️', name: 'Biber' } },
 ];
+
+/** Alınan ya da bedava gelen yumurtanın nadir parlak (✨) olma şansı. Öneri; testlerde ayarlanacak. */
+export const SHINY_CHANCE = 0.05;
+/** Parlak hayvan bu oranda fazla altın kazandırır. */
+export const SHINY_BONUS = 0.5;
+/** Parlak yumurtanın ve hayvanın altın sarısı çerçevesi. */
+export const SHINY_COLOR = '#FFC400';
 
 export const MAX_LEVEL = ANIMALS.length;
 
@@ -58,7 +70,6 @@ export const RELEASE_VALUE_SEC = 60;
 
 export type UpgradeId =
   | 'autoEgg'
-  | 'autoFeeder'
   | 'moreVisitors'
   | 'fasterIncubator'
   | 'incubatorSlot'
@@ -108,14 +119,6 @@ export const UPGRADES: readonly UpgradeConfig[] = [
     emoji: '🥚',
     costs: [150, 2_000, 20_000],
     effect: (level) => (level === 0 ? 'Kapalı' : `${AUTO_EGG_EVERY_SEC[level]} sn'de 1 bedava yumurta`),
-  },
-  {
-    id: 'autoFeeder',
-    name: 'Otomatik yemlik',
-    emoji: '🥣',
-    // Doküman: çocuk okuldayken ya da uyurken hayvanı kaçmasın diye erken ve ucuz açılmalı.
-    costs: [250],
-    effect: (level) => (level === 0 ? 'Kapalı' : 'Acıkan hayvanları kendisi besler'),
   },
   {
     id: 'moreVisitors',
@@ -221,14 +224,36 @@ export const HUNGER_SEC = FAST_HUNGER ? 15 * 60 : 4 * 60 * 60;
 /** Tokluk %0'a indikten sonra hayvanın kaçması. Bütün hayvanlar için aynı. */
 export const ESCAPE_AFTER_EMPTY_SEC = FAST_HUNGER ? 5 * 60 : 8 * 60 * 60;
 /** Dokümandaki tokluk sınırları: %50'nin altında acıkmış, %20'nin altında üzgün. */
-const HUNGRY_BELOW = FAST_HUNGER ? 2 / 3 : 0.5;
+export const HUNGRY_BELOW = FAST_HUNGER ? 2 / 3 : 0.5;
 const SAD_BELOW = FAST_HUNGER ? 1 / 3 : 0.2;
-/** Bir hayvanı %0'dan %100'e doyurmanın bedeli: hayvanın bu kadar saniyelik kazancı. */
-export const FEED_FULL_COST_SEC = 10 * 60;
-/** Otomatik yemlik, tokluk bu orana inince hayvanı besler. */
-export const AUTO_FEED_AT = 0.5;
+/**
+ * Bir yemin fiyatı: o hayvanın (yetenek ve bonuslar hariç) bu kadar saniyelik kazancı. Bir yem hayvanı
+ * tamamen doyurur. Öneri; testlerde ayarlanacak.
+ */
+export const FOOD_COST_SEC = 5 * 60;
+/** Tokluğu bunun üstünde olan hayvan beslenmez; yem boşa gitmesin. */
+export const FEED_BELOW = 0.95;
+/**
+ * Otomatik yemlik kaldırıldı (hayvanlar tek tek beslenir). Daha önce alanlara bu kadar altın iade edilir.
+ * Eski kayıtlardaki upgrades.autoFeeder seviyesi bunun için okunur.
+ */
+export const AUTO_FEEDER_REFUND = 250;
+
+/** Hayvanın yeminin fiyatı. */
+export function foodPrice(level: number): number {
+  const animal = animalFor(level);
+  return Math.ceil((animal.dropAmount / animal.dropEverySec) * FOOD_COST_SEC);
+}
 
 export type Mood = 'happy' | 'hungry' | 'sad' | 'leaving';
+
+/** Tokluk çubuğunun rengi: yeşil tok, sarı acıkmış, turuncu üzgün, kırmızı kaçmak üzere. */
+export const FULLNESS_COLOR: Record<Mood, string> = {
+  happy: '#5CC85C',
+  hungry: '#FFB020',
+  sad: '#FF7A45',
+  leaving: '#FF4D4D',
+};
 
 /** Dokümandaki tokluk tablosu. */
 export function moodFor(fullness: number): Mood {

@@ -1,8 +1,9 @@
-import { StyleSheet, Text, View, type HostInstance } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type HostInstance } from 'react-native';
 
 import { EggView } from '@/components/egg-view';
 import { formatDuration } from '@/game/format';
-import type { IncubatorSlot } from '@/game/state';
+import { FRUIT_GAME } from '@/game/fruit-merge';
+import { canBoost, type IncubatorSlot } from '@/game/state';
 
 type Props = {
   slots: (IncubatorSlot | null)[];
@@ -11,9 +12,19 @@ type Props = {
   parkLimit: number;
   /** Her yuva bir bırakma alanıdır; ekran onları bu fonksiyonla kaydeder. */
   zoneRef: (id: string) => (view: HostInstance | null) => void;
+  /** Yuvadaki yumurtayı mini oyunla hızlandırmak için. */
+  onPlay: (slot: number) => void;
 };
 
-export function Incubator({ slots, now, parkCount, parkLimit, zoneRef }: Props) {
+/**
+ * Mini oyun yalnızca kalan süre oyunun kendisinden uzunsa önerilir; 10 saniyelik civciv için
+ * 30 saniyelik oyun oynatmanın anlamı yok.
+ */
+function playable(slot: IncubatorSlot, now: number): boolean {
+  return canBoost(slot, now) && slot.startedAt + slot.durationMs - now > FRUIT_GAME.durationSec * 1000;
+}
+
+export function Incubator({ slots, now, parkCount, parkLimit, zoneRef, onPlay }: Props) {
   // 2'den fazla yuva varsa ikişer ikişer alt alta dizilir, yoksa telefonda sığmaz.
   const compact = slots.length > 2;
   return (
@@ -23,14 +34,30 @@ export function Incubator({ slots, now, parkCount, parkLimit, zoneRef }: Props) 
           key={i}
           ref={zoneRef(`slot-${i}`)}
           style={[styles.slot, compact && styles.compactSlot, !slot && styles.emptySlot]}>
-          {slot ? <SlotContent slot={slot} now={now} parkFull={parkCount >= parkLimit} /> : <EmptySlot />}
+          {slot ? (
+            <SlotContent
+              slot={slot}
+              now={now}
+              parkFull={parkCount >= parkLimit}
+              onPlay={playable(slot, now) ? () => onPlay(i) : null}
+            />
+          ) : (
+            <EmptySlot />
+          )}
         </View>
       ))}
     </View>
   );
 }
 
-function SlotContent({ slot, now, parkFull }: { slot: IncubatorSlot; now: number; parkFull: boolean }) {
+type SlotContentProps = {
+  slot: IncubatorSlot;
+  now: number;
+  parkFull: boolean;
+  onPlay: (() => void) | null;
+};
+
+function SlotContent({ slot, now, parkFull, onPlay }: SlotContentProps) {
   const elapsed = now - slot.startedAt;
   const progress = Math.min(1, elapsed / slot.durationMs);
   const done = progress >= 1;
@@ -42,9 +69,17 @@ function SlotContent({ slot, now, parkFull }: { slot: IncubatorSlot; now: number
         <View style={styles.bar}>
           <View style={[styles.barFill, { width: `${progress * 100}%` }]} />
         </View>
-        <Text style={styles.time}>
-          {done ? (parkFull ? 'Park dolu!' : 'Çatlıyor!') : formatDuration((slot.durationMs - elapsed) / 1000)}
-        </Text>
+        <View style={styles.timeRow}>
+          <Text style={styles.time}>
+            {done ? (parkFull ? 'Park dolu!' : 'Çatlıyor!') : formatDuration((slot.durationMs - elapsed) / 1000)}
+          </Text>
+          {/* Yumurta başına bir kez: mini oyunla kuluçka süresini kısalt. */}
+          {onPlay && (
+            <Pressable style={styles.play} onPress={onPlay} hitSlop={6}>
+              <Text style={styles.playText}>🍉 Oyna</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </>
   );
@@ -101,6 +136,23 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     backgroundColor: '#FF9F45',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  play: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#FF6B8A',
+  },
+  playText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'white',
   },
   time: {
     fontSize: 15,

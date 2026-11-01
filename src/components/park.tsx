@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
-import { COLOR_HEX } from '@/game/colors';
-import { animalFor, MAX_SKILL, moodFor, skillFor, type Mood } from '@/game/config';
+import type { AnimalsTab } from '@/components/animals-panel';
+import {
+  animalFor,
+  FEED_BELOW,
+  FULLNESS_COLOR,
+  MAX_SKILL,
+  moodFor,
+  SHINY_COLOR,
+  skillFor,
+  type Mood,
+} from '@/game/config';
 import { formatNumber, formatWait } from '@/game/format';
 import {
   animalIncomePerSecond,
@@ -19,10 +28,10 @@ type Props = {
   gold: number;
   /** "Daha çok ziyaretçi" yükseltmesinin kazanç çarpanı. */
   incomeBonus: number;
-  /** Bütün aç hayvanları doyurmanın bedeli; 0 ise herkes tok. */
-  feedCost: number;
-  canFeed: boolean;
-  onFeed: () => void;
+  /** Yem stoğu: hayvan seviyesine göre kaç yem var. */
+  food: Record<number, number>;
+  onFeed: (id: number) => void;
+  onOpenAnimals: (tab: AnimalsTab) => void;
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onRelease: (id: number) => void;
@@ -60,13 +69,6 @@ const MOOD_BUBBLE: Record<Mood, string | null> = {
   leaving: '😭',
 };
 
-const FULLNESS_COLOR: Record<Mood, string> = {
-  happy: '#5CC85C',
-  hungry: '#FFB020',
-  sad: '#FF7A45',
-  leaving: '#FF4D4D',
-};
-
 const DECORATIONS = [
   { emoji: '🌳', top: '6%', left: '4%' },
   { emoji: '🌳', top: '10%', left: '84%' },
@@ -80,9 +82,9 @@ export function Park({
   now,
   gold,
   incomeBonus,
-  feedCost,
-  canFeed,
+  food,
   onFeed,
+  onOpenAnimals,
   selectedId,
   onSelect,
   onRelease,
@@ -91,6 +93,8 @@ export function Park({
   const [area, setArea] = useState({ width: 0, height: 0 });
   const selected = animals.find((a) => a.id === selectedId) ?? null;
   const selectedFullness = selected ? fullnessAt(selected, now) : 0;
+  // Acıkmaya başlayan hayvan varsa Hayvanlarım düğmesinde kırmızı nokta çıkar.
+  const someoneHungry = animals.some((a) => moodFor(fullnessAt(a, now)) !== 'happy');
 
   // Üzgün hayvanlar parkın altında yan yana oturur; köşeye sıkışınca başlarındaki işaret görünmüyordu.
   const resting = animals.filter((a) => isStill(moodFor(fullnessAt(a, now))));
@@ -129,9 +133,9 @@ export function Park({
         ))}
 
       {animals.length > 0 && (
-        <Pressable style={[styles.bowl, !canFeed && styles.bowlDisabled]} disabled={!canFeed} onPress={onFeed}>
-          <Text style={styles.bowlIcon}>🥣</Text>
-          <Text style={styles.bowlText}>{feedCost > 0 ? `Besle 🪙 ${formatNumber(feedCost)}` : 'Herkes tok'}</Text>
+        <Pressable style={styles.myAnimals} onPress={() => onOpenAnimals('animals')}>
+          <Text style={styles.myAnimalsText}>🐾 Hayvanlarım</Text>
+          {someoneHungry && <View style={styles.dot} />}
         </Pressable>
       )}
 
@@ -161,6 +165,20 @@ export function Park({
             </Text>
           </View>
           <View style={styles.panelActions}>
+            {(food[selected.level] ?? 0) > 0 ? (
+              <Pressable
+                style={[styles.feedButton, selectedFullness >= FEED_BELOW && styles.skillLocked]}
+                disabled={selectedFullness >= FEED_BELOW}
+                onPress={() => onFeed(selected.id)}>
+                <Text style={styles.skillButtonText}>
+                  {animalFor(selected.level).food.emoji} Besle ×{food[selected.level]}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable style={[styles.feedButton, styles.buyFoodButton]} onPress={() => onOpenAnimals('food')}>
+                <Text style={styles.skillButtonText}>{animalFor(selected.level).food.emoji} Yem al</Text>
+              </Pressable>
+            )}
             <SkillButton
               animal={selected}
               now={now}
@@ -169,7 +187,7 @@ export function Park({
               onPress={() => onUpgradeSkill(selected.id)}
             />
             <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
-              <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected, incomeBonus))} 🪙</Text>
+              <Text style={styles.releaseText}>Sal +{formatNumber(releaseValue(selected, incomeBonus))}</Text>
             </Pressable>
           </View>
         </View>
@@ -193,20 +211,20 @@ function SkillButton({ animal, now, gold, bonus, onPress }: SkillButtonProps) {
   if (unlockAt === null || cost === null) {
     return (
       <View style={[styles.skillButton, styles.skillMaxed]}>
-        <Text style={styles.skillButtonText}>★ Yetenek tam!</Text>
+        <Text style={styles.skillButtonText}>★ Tam</Text>
       </View>
     );
   }
   if (now < unlockAt) {
     return (
       <View style={[styles.skillButton, styles.skillLocked]}>
-        <Text style={styles.skillButtonText}>🔒 {formatWait((unlockAt - now) / 1000)} sonra</Text>
+        <Text style={styles.skillButtonText}>🔒 {formatWait((unlockAt - now) / 1000)}</Text>
       </View>
     );
   }
   return (
     <Pressable style={[styles.skillButton, gold < cost && styles.skillLocked]} disabled={gold < cost} onPress={onPress}>
-      <Text style={styles.skillButtonText}>★ Geliştir 🪙 {formatNumber(cost)}</Text>
+      <Text style={styles.skillButtonText}>★ {formatNumber(cost)}</Text>
     </Pressable>
   );
 }
@@ -288,13 +306,15 @@ function WanderingAnimal({ animal, fullness, restX, skillReady, area, selected, 
         {animal.lastDropAt !== null && <CoinPop key={animal.lastDropAt} amount={animal.lastDropAmount} />}
         {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
         {skillReady && <Text style={styles.skillBubble}>⭐</Text>}
+        {animal.variant.shiny && <Text style={[styles.shinySparkle, { top: size * 0.35 }]}>✨</Text>}
         <Text style={{ fontSize: size, opacity: mood === 'leaving' ? 0.6 : 1 }}>{animalFor(animal.level).emoji}</Text>
         <View
           style={[
             styles.groundMark,
             {
               width: size * 0.9,
-              backgroundColor: COLOR_HEX[animal.variant.color],
+              // Hayvanın altındaki iz, yumurtasının rengi; parlak hayvanınki altın sarısı.
+              backgroundColor: animal.variant.shiny ? SHINY_COLOR : animalFor(animal.level).eggColor,
               borderWidth: selected ? 2 : 0,
             },
           ]}
@@ -425,6 +445,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: 'white',
   },
+  shinySparkle: {
+    position: 'absolute',
+    right: -14,
+    fontSize: 14,
+  },
   skillBubble: {
     position: 'absolute',
     top: -20,
@@ -464,30 +489,44 @@ const styles = StyleSheet.create({
     right: -12,
     fontSize: 18,
   },
-  bowl: {
+  myAnimals: {
     position: 'absolute',
     top: 8,
     alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: 'rgba(255,248,232,0.95)',
     borderWidth: 2,
     borderColor: '#F2B84B',
   },
-  bowlDisabled: {
-    opacity: 0.6,
-  },
-  bowlIcon: {
-    fontSize: 20,
-  },
-  bowlText: {
-    fontSize: 14,
-    fontWeight: '800',
+  myAnimalsText: {
+    fontSize: 15,
+    fontWeight: '900',
     color: '#5B3A1E',
+  },
+  dot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#FF4D4D',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  feedButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#5CC85C',
+  },
+  buyFoodButton: {
+    backgroundColor: '#FF9F45',
   },
   releaseButton: {
     flex: 1,

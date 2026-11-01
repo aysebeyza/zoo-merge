@@ -3,22 +3,21 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimalsPanel, type AnimalsTab } from '@/components/animals-panel';
 import { AwayGoldModal } from '@/components/away-gold-modal';
 import { DraggableEgg } from '@/components/draggable-egg';
 import { EscapedModal } from '@/components/escaped-modal';
+import { FruitMergeGame } from '@/components/fruit-merge-game';
 import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { Park } from '@/components/park';
 import { UpgradesPanel } from '@/components/upgrades-panel';
-import { COLOR_HEX, PRIMARY_COLORS, type ColorId } from '@/game/colors';
 import { eggPrice, GRID_COLUMNS, UPGRADES, upgradeCost } from '@/game/config';
 import { formatNumber } from '@/game/format';
 import {
   canMerge,
   createInitialState,
-  feedAllCost,
-  feedPlan,
   gameReducer,
   parkIncomePerSecond,
   stateIncomeBonus,
@@ -31,10 +30,6 @@ const TICK_MS = 250;
 const MAX_BOARD_WIDTH = 480;
 const GRID_GAP = 8;
 
-function randomPrimary(): ColorId {
-  return PRIMARY_COLORS[Math.floor(Math.random() * PRIMARY_COLORS.length)];
-}
-
 function haptic(kind: 'merge' | 'success') {
   if (Platform.OS === 'web') return;
   if (kind === 'merge') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -42,16 +37,20 @@ function haptic(kind: 'merge' | 'success') {
 }
 
 export default function GameScreen() {
-  const [state, dispatch] = useReducer(gameReducer, null, () => createInitialState(Date.now(), randomPrimary()));
+  const [state, dispatch] = useReducer(gameReducer, null, () => createInitialState(Date.now()));
   const loaded = useGameSave(state, dispatch);
   const [draggingFrom, setDraggingFrom] = useState<number | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<number | null>(null);
   const [upgradesOpen, setUpgradesOpen] = useState(false);
+  /** Hayvanlarım ekranı açıksa hangi sekmede açıldığı; kapalıysa null. */
+  const [animalsTab, setAnimalsTab] = useState<AnimalsTab | null>(null);
+  /** Mini oyunla hızlandırılan kuluçka yuvası; oyun açık değilse null. */
+  const [boostSlot, setBoostSlot] = useState<number | null>(null);
   const { width } = useWindowDimensions();
 
   useEffect(() => {
     const timer = setInterval(
-      () => dispatch({ type: 'tick', now: Date.now(), eggColor: randomPrimary(), roll: Math.random() }),
+      () => dispatch({ type: 'tick', now: Date.now(), roll: Math.random(), shinyRoll: Math.random() }),
       TICK_MS,
     );
     return () => clearInterval(timer);
@@ -101,8 +100,6 @@ export default function GameScreen() {
   const canBuy = !gridFull && state.gold >= price;
   const incomeBonus = stateIncomeBonus(state);
   const parkLimit = stateParkLimit(state);
-  const feedCost = feedAllCost(state);
-  const canFeed = feedPlan(state).ids.length > 0;
   // Alınabilecek bir yükseltme varsa düğmede işaret çıkar.
   const upgradeReady = UPGRADES.some((u) => {
     const cost = upgradeCost(u.id, state.upgrades[u.id]);
@@ -130,11 +127,14 @@ export default function GameScreen() {
           haptic('success');
         }}
         incomeBonus={incomeBonus}
-        feedCost={feedCost}
-        canFeed={canFeed}
-        onFeed={() => {
-          dispatch({ type: 'feedAll' });
+        food={state.food}
+        onFeed={(id) => {
+          dispatch({ type: 'feedAnimal', id });
           haptic('success');
+        }}
+        onOpenAnimals={(tab) => {
+          setSelectedAnimal(null);
+          setAnimalsTab(tab);
         }}
         selectedId={selectedAnimal}
         onSelect={setSelectedAnimal}
@@ -150,6 +150,7 @@ export default function GameScreen() {
         parkCount={state.park.length}
         parkLimit={parkLimit}
         zoneRef={zoneRef}
+        onPlay={setBoostSlot}
       />
 
       {/* Sürüklenen yumurta diğer bölümlerin üstünde görünsün diye alan öne alınır. */}
@@ -182,9 +183,8 @@ export default function GameScreen() {
         <Pressable
           style={[styles.buyButton, !canBuy && styles.buyDisabled]}
           disabled={!canBuy}
-          onPress={() => dispatch({ type: 'buyEgg', nextColor: randomPrimary(), roll: Math.random() })}>
-          {/* Sıradaki yumurtanın rengi önceden görünür, çocuk plan yapabilsin. */}
-          <View style={[styles.nextColor, { backgroundColor: COLOR_HEX[state.nextEggColor] }]} />
+          onPress={() => dispatch({ type: 'buyEgg', roll: Math.random(), shinyRoll: Math.random() })}>
+          <Text style={styles.buyIcon}>🥚</Text>
           <Text style={styles.buyTitle}>{gridFull ? 'Alan dolu' : 'Yumurta'}</Text>
           <Text style={styles.buyPrice}>🪙 {formatNumber(price)}</Text>
         </Pressable>
@@ -217,6 +217,39 @@ export default function GameScreen() {
             haptic('success');
           }}
           onClose={() => setUpgradesOpen(false)}
+        />
+      )}
+
+      {animalsTab !== null && (
+        <AnimalsPanel
+          state={state}
+          initialTab={animalsTab}
+          onFeed={(id) => {
+            dispatch({ type: 'feedAnimal', id });
+            haptic('success');
+          }}
+          onBuyFood={(level) => dispatch({ type: 'buyFood', level })}
+          onBuyMissingFood={() => {
+            dispatch({ type: 'buyMissingFood' });
+            haptic('success');
+          }}
+          onUpgradeSkill={(id) => {
+            dispatch({ type: 'upgradeSkill', id });
+            haptic('success');
+          }}
+          onRelease={(id) => dispatch({ type: 'releaseAnimal', id })}
+          onClose={() => setAnimalsTab(null)}
+        />
+      )}
+
+      {boostSlot !== null && (
+        <FruitMergeGame
+          onCancel={() => setBoostSlot(null)}
+          onFinish={(fraction) => {
+            dispatch({ type: 'boostIncubation', slot: boostSlot, fraction });
+            haptic('success');
+            setBoostSlot(null);
+          }}
         />
       )}
 
@@ -291,12 +324,8 @@ const styles = StyleSheet.create({
   buyDisabled: {
     opacity: 0.5,
   },
-  nextColor: {
-    width: 22,
-    height: 28,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: 'white',
+  buyIcon: {
+    fontSize: 22,
   },
   buyTitle: {
     fontSize: 20,

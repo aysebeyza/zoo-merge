@@ -31,7 +31,7 @@ export function EscapedModal({ level, inGiftBox, onClose }: Props) {
           {animal.name} çok acıktı ve yumurtasına geri döndü.
           {inGiftBox ? ' Yumurtası 🎁 hediye kutusunda.' : ''}
         </Text>
-        <Text style={styles.hint}>Kuluçkaya koyarsan geri gelir. Hayvanlarını 🥣 ile beslemeyi unutma!</Text>
+        <Text style={styles.hint}>{"Kuluçkaya koyarsan geri gelir. Hayvanlarını 🐾 Hayvanlarım'dan beslemeyi unutma!"}</Text>
         <Pressable style={styles.button} onPress={onClose}>
           <Text style={styles.buttonText}>Tamam</Text>
         </Pressable>

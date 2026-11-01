@@ -1,8 +1,8 @@
 // Oyun durumunu yazıya (JSON) çevirir ve geri okur. Depolamanın kendisi arayüz tarafında yapılır.
 
-import type { ColorId } from './colors.ts';
-import { GRID_SIZE, incubatorSlots } from './config.ts';
-import { createInitialState, type GameState } from './state.ts';
+import { AUTO_FEEDER_REFUND, GRID_SIZE, incubatorSlots, UPGRADES } from './config.ts';
+import { createInitialState, type Egg, type GameState } from './state.ts';
+import type { Variant } from './variant.ts';
 
 /** Kayıt biçimi değişirse artırılır; eski kayıtlar parseSave içinde yeni biçime çevrilir. */
 export const SAVE_VERSION = 1;
@@ -18,7 +18,7 @@ export function serializeSave(state: GameState): string {
 }
 
 /** Kayıt bozuksa ya da tanınmıyorsa null döner; oyun o zaman baştan başlar. */
-export function parseSave(json: string | null, firstColor: ColorId): GameState | null {
+export function parseSave(json: string | null): GameState | null {
   if (!json) return null;
   let file: Partial<SaveFile>;
   try {
@@ -30,23 +30,48 @@ export function parseSave(json: string | null, firstColor: ColorId): GameState |
   if (file.version !== SAVE_VERSION || !saved || typeof saved.now !== 'number') return null;
   if (!Array.isArray(saved.grid) || !Array.isArray(saved.incubator) || !Array.isArray(saved.park)) return null;
 
+  // Renk karışımı kalktı: eski kayıttaki "sıradaki yumurta rengi" atılır.
+  const { nextEggColor: _, ...rest } = saved as GameState & { nextEggColor?: unknown };
   // Sonradan eklenen alanlar eski kayıtta yoksa başlangıç değerleri kullanılır.
-  const fresh = createInitialState(saved.now, firstColor);
-  const upgrades = { ...fresh.upgrades, ...saved.upgrades };
+  const fresh = createInitialState(saved.now);
+  // Yalnızca bugün olan yükseltmeler okunur. Kaldırılan otomatik yemliği alanlara bedeli iade edilir.
+  const savedUpgrades = (saved.upgrades ?? {}) as Record<string, number>;
+  const upgrades = { ...fresh.upgrades };
+  for (const { id } of UPGRADES) upgrades[id] = savedUpgrades[id] ?? 0;
+  const refund = (savedUpgrades.autoFeeder ?? 0) > 0 ? AUTO_FEEDER_REFUND : 0;
   return {
     ...fresh,
-    ...saved,
+    ...rest,
+    gold: saved.gold + refund,
     upgrades,
+    food: saved.food ?? {},
     // Eski kayıtlarda olmayan hayvan alanları: tokluk ve parka çıkış anı kaydın yapıldığı an, yetenek 0.
     park: saved.park.map((animal) => ({
       ...animal,
+      variant: migrateVariant(animal.variant),
       fedAt: animal.fedAt ?? saved.now,
       skill: animal.skill ?? 0,
       parkedAt: animal.parkedAt ?? saved.now,
     })),
-    grid: fitLength(saved.grid, GRID_SIZE),
-    incubator: fitLength(saved.incubator, incubatorSlots(upgrades.incubatorSlot)),
+    grid: fitLength(saved.grid.map(migrateEgg), GRID_SIZE),
+    incubator: fitLength(
+      saved.incubator.map((slot) => slot && { ...slot, egg: migrateEgg(slot.egg)! }),
+      incubatorSlots(upgrades.incubatorSlot),
+    ),
+    giftBox: (saved.giftBox ?? []).map((egg) => migrateEgg(egg)!),
   };
+}
+
+function migrateEgg(egg: Egg | null): Egg | null {
+  return egg && { ...egg, variant: migrateVariant(egg.variant) };
+}
+
+/**
+ * Renk karışımı döneminden kalan çeşitler: desenli (+%50) parlak olur, çünkü parlak da +%50 verir.
+ * Saf (+%20) hal artık yok; normal sayılır.
+ */
+function migrateVariant(variant: Partial<Variant> & { patterned?: boolean }): Variant {
+  return { shiny: Boolean(variant.shiny ?? variant.patterned) };
 }
 
 function fitLength<T>(items: (T | null)[], length: number): (T | null)[] {
