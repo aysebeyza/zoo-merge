@@ -1,6 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { PARK_LIMIT } from '@/game/config';
 import { formatNumber } from '@/game/format';
 
 type Props = {
@@ -8,14 +7,15 @@ type Props = {
   diamonds: number;
   incomePerSecond: number;
   parkCount: number;
+  parkLimit: number;
 };
 
-export function Hud({ gold, diamonds, incomePerSecond, parkCount }: Props) {
+export function Hud({ gold, diamonds, incomePerSecond, parkCount, parkLimit }: Props) {
   return (
     <View style={styles.row}>
       <Pill icon="🪙" text={formatNumber(gold)} />
       <Pill icon="💎" text={formatNumber(diamonds)} />
-      <Pill icon="🐾" text={`${parkCount}/${PARK_LIMIT}`} />
+      <Pill icon="🐾" text={`${parkCount}/${parkLimit}`} />
       <Pill icon="⏱️" text={`+${formatNumber(incomePerSecond)}/sn`} />
     </View>
   );

@@ -26,7 +26,9 @@ Terminalde çıkan QR kodu telefondaki Expo Go uygulamasıyla okut.
 | `src/game/` | Oyunun kuralları ve sayıları. Arayüzden bağımsız, testli. |
 | `src/game/config.ts` | Hayvan tablosu, kuluçka süreleri, altın değerleri, yumurta fiyatı |
 | `src/game/colors.ts` | Renk karışımı kuralları |
-| `src/game/state.ts` | Oyun durumu ve tüm hamleler (yumurta alma, birleştirme, kuluçka, park) |
+| `src/game/state.ts` | Oyun durumu ve tüm hamleler (yumurta alma, birleştirme, kuluçka, park, yükseltmeler) |
+| `src/game/save.ts` | Kaydı yazıya çevirme ve geri okuma |
+| `src/hooks/` | Kaydı telefona yazan ve açılışta yükleyen kod |
 | `src/components/` | Ekran parçaları: yumurta, park, kuluçka makinesi, üst bilgi çubuğu |
 | `src/app/` | Ekranlar (Expo Router) |
 
@@ -39,5 +41,10 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - 2 yuvalı kuluçka makinesi
 - Parkta gezen ve altın düşüren hayvanlar, doğaya salma
 - "Yeni hayvan!" kutlaması ve elmas ödülü
+- Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
+- Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
+- 6 yükseltme: otomatik yumurta, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
 
-Henüz olmayanlar: kayıt (oyun kapanınca sıfırlanır), yükseltmeler, besleme, yetenekler, koleksiyon defteri, reklamlar.
+Henüz olmayanlar: besleme (ve "Otomatik yemlik" yükseltmesi), yetenekler, koleksiyon defteri, reklamlar.
+
+Yükseltme fiyatları ve seviye sayıları dokümanda yoktu; `src/game/config.ts` içindeki değerler öneridir, testlerde ayarlanacak.

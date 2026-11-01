@@ -52,3 +52,107 @@ export function eggPrice(eggsBought: number): number {
 
 /** Doğaya salınan hayvan, yaklaşık 1 dakikalık kazancını verir. */
 export const RELEASE_VALUE_SEC = 60;
+
+// --- Yükseltmeler ---
+// Dokümanda etkiler var ama fiyatlar ve seviye sayıları yok. Aşağıdakiler öneri; testlerde ayarlanacak.
+
+export type UpgradeId = 'autoEgg' | 'moreVisitors' | 'fasterIncubator' | 'incubatorSlot' | 'betterEgg' | 'biggerPark';
+
+/** Otomatik yumurta: seviyeye göre kaç saniyede bir bedava yumurta düşer (0. seviye kapalı). */
+export const AUTO_EGG_EVERY_SEC = [0, 30, 20, 10];
+/** Daha iyi yumurta: satın alınan yumurtanın 2. seviyeden başlama şansı. */
+export const BETTER_EGG_CHANCE = [0, 0.25, 0.5, 1];
+
+export function parkLimit(biggerParkLevel: number): number {
+  return PARK_LIMIT + biggerParkLevel;
+}
+
+/** Daha çok ziyaretçi: her seviye altın kazancını %10 artırır. */
+export function incomeBonus(moreVisitorsLevel: number): number {
+  return 1 + 0.1 * moreVisitorsLevel;
+}
+
+export function incubatorSlots(incubatorSlotLevel: number): number {
+  return INCUBATOR_SLOTS + incubatorSlotLevel;
+}
+
+/** Kuluçka makinesi: her seviye kuluçka süresini %10 kısaltır (en fazla %50). */
+export function incubationFactor(fasterIncubatorLevel: number): number {
+  return 1 - 0.1 * fasterIncubatorLevel;
+}
+
+export type UpgradeConfig = {
+  id: UpgradeId;
+  name: string;
+  emoji: string;
+  /** Her seviyenin altın bedeli. Dizinin uzunluğu en yüksek seviyedir. */
+  costs: readonly number[];
+  /** Seviyenin etkisini kısaca anlatır; 0, henüz alınmamış demek. */
+  effect: (level: number) => string;
+};
+
+export const UPGRADES: readonly UpgradeConfig[] = [
+  {
+    id: 'autoEgg',
+    name: 'Otomatik yumurta',
+    emoji: '🥚',
+    costs: [150, 2_000, 20_000],
+    effect: (level) => (level === 0 ? 'Kapalı' : `${AUTO_EGG_EVERY_SEC[level]} sn'de 1 bedava yumurta`),
+  },
+  {
+    id: 'moreVisitors',
+    name: 'Daha çok ziyaretçi',
+    emoji: '🎈',
+    costs: [300, 1_500, 7_500, 40_000, 200_000],
+    effect: (level) => (level === 0 ? 'Normal kazanç' : `+%${level * 10} altın`),
+  },
+  {
+    id: 'fasterIncubator',
+    name: 'Kuluçka makinesi',
+    emoji: '🔥',
+    costs: [400, 2_500, 12_000, 60_000, 300_000],
+    effect: (level) => (level === 0 ? 'Normal hız' : `Kuluçka %${level * 10} daha kısa`),
+  },
+  {
+    id: 'incubatorSlot',
+    name: 'Yeni kuluçka yuvası',
+    emoji: '🐣',
+    costs: [500, 30_000],
+    effect: (level) => `${incubatorSlots(level)} yuva`,
+  },
+  {
+    id: 'betterEgg',
+    name: 'Daha iyi yumurta',
+    emoji: '✨',
+    costs: [800, 8_000, 80_000],
+    effect: (level) =>
+      level === 0
+        ? 'Yumurtalar 1. seviye'
+        : BETTER_EGG_CHANCE[level] >= 1
+          ? 'Yumurtalar hep 2. seviye'
+          : `%${BETTER_EGG_CHANCE[level] * 100} şansla 2. seviye`,
+  },
+  {
+    id: 'biggerPark',
+    name: 'Daha büyük park',
+    emoji: '🏞️',
+    costs: [1_000, 5_000, 25_000, 100_000],
+    effect: (level) => `${parkLimit(level)} hayvan`,
+  },
+];
+
+export function upgradeFor(id: UpgradeId): UpgradeConfig {
+  const upgrade = UPGRADES.find((u) => u.id === id);
+  if (!upgrade) throw new Error(`Bilinmeyen yükseltme: ${id}`);
+  return upgrade;
+}
+
+/** Bir sonraki seviyenin bedeli; en üst seviyedeyse null. */
+export function upgradeCost(id: UpgradeId, currentLevel: number): number | null {
+  return upgradeFor(id).costs[currentLevel] ?? null;
+}
+
+/** Oyun kapalıyken en fazla 2 saat boyunca altın birikir. */
+export const OFFLINE_EARNING_CAP_SEC = 2 * 60 * 60;
+/** Oyuncu en az bu kadar uzak kaldıysa "Sen yokken ... kazandın!" ekranı çıkar. */
+export const AWAY_REPORT_SEC = 60;

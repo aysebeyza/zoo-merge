@@ -3,15 +3,25 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AwayGoldModal } from '@/components/away-gold-modal';
 import { DraggableEgg } from '@/components/draggable-egg';
 import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { Park } from '@/components/park';
+import { UpgradesPanel } from '@/components/upgrades-panel';
 import { COLOR_HEX, PRIMARY_COLORS, type ColorId } from '@/game/colors';
-import { eggPrice, GRID_COLUMNS } from '@/game/config';
+import { eggPrice, GRID_COLUMNS, UPGRADES, upgradeCost } from '@/game/config';
 import { formatNumber } from '@/game/format';
-import { canMerge, createInitialState, gameReducer, parkIncomePerSecond } from '@/game/state';
+import {
+  canMerge,
+  createInitialState,
+  gameReducer,
+  parkIncomePerSecond,
+  stateIncomeBonus,
+  stateParkLimit,
+} from '@/game/state';
+import { useGameSave } from '@/hooks/use-game-save';
 
 const TICK_MS = 250;
 const MAX_BOARD_WIDTH = 480;
@@ -31,12 +41,14 @@ function haptic(kind: 'merge' | 'success') {
 
 export default function GameScreen() {
   const [state, dispatch] = useReducer(gameReducer, null, () => createInitialState(Date.now(), randomPrimary()));
+  const loaded = useGameSave(state, dispatch);
   const [draggingFrom, setDraggingFrom] = useState<number | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<number | null>(null);
+  const [upgradesOpen, setUpgradesOpen] = useState(false);
   const { width } = useWindowDimensions();
 
   useEffect(() => {
-    const timer = setInterval(() => dispatch({ type: 'tick', now: Date.now() }), TICK_MS);
+    const timer = setInterval(() => dispatch({ type: 'tick', now: Date.now(), eggColor: randomPrimary() }), TICK_MS);
     return () => clearInterval(timer);
   }, []);
 
@@ -85,18 +97,29 @@ export default function GameScreen() {
   const price = eggPrice(state.eggsBought);
   const gridFull = !state.grid.includes(null);
   const canBuy = !gridFull && state.gold >= price;
+  const incomeBonus = stateIncomeBonus(state);
+  const parkLimit = stateParkLimit(state);
+  // Alınabilecek bir yükseltme varsa düğmede işaret çıkar.
+  const upgradeReady = UPGRADES.some((u) => {
+    const cost = upgradeCost(u.id, state.upgrades[u.id]);
+    return cost !== null && state.gold >= cost;
+  });
+
+  if (!loaded) return <SafeAreaView style={styles.screen} />;
 
   return (
     <SafeAreaView style={styles.screen}>
       <Hud
         gold={state.gold}
         diamonds={state.diamonds}
-        incomePerSecond={parkIncomePerSecond(state.park)}
+        incomePerSecond={parkIncomePerSecond(state.park, incomeBonus)}
         parkCount={state.park.length}
+        parkLimit={parkLimit}
       />
 
       <Park
         animals={state.park}
+        incomeBonus={incomeBonus}
         selectedId={selectedAnimal}
         onSelect={setSelectedAnimal}
         onRelease={(id) => {
@@ -105,7 +128,13 @@ export default function GameScreen() {
         }}
       />
 
-      <Incubator slots={state.incubator} now={state.now} parkCount={state.park.length} zoneRef={zoneRef} />
+      <Incubator
+        slots={state.incubator}
+        now={state.now}
+        parkCount={state.park.length}
+        parkLimit={parkLimit}
+        zoneRef={zoneRef}
+      />
 
       {/* Sürüklenen yumurta diğer bölümlerin üstünde görünsün diye alan öne alınır. */}
       <View style={[styles.board, { width: boardWidth }, draggingFrom !== null && styles.raised]}>
@@ -133,18 +162,47 @@ export default function GameScreen() {
         ))}
       </View>
 
-      <Pressable
-        style={[styles.buyButton, !canBuy && styles.buyDisabled]}
-        disabled={!canBuy}
-        onPress={() => dispatch({ type: 'buyEgg', nextColor: randomPrimary() })}>
-        {/* Sıradaki yumurtanın rengi önceden görünür, çocuk plan yapabilsin. */}
-        <View style={[styles.nextColor, { backgroundColor: COLOR_HEX[state.nextEggColor] }]} />
-        <Text style={styles.buyTitle}>{gridFull ? 'Alan dolu' : 'Yumurta'}</Text>
-        <Text style={styles.buyPrice}>🪙 {formatNumber(price)}</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          style={[styles.buyButton, !canBuy && styles.buyDisabled]}
+          disabled={!canBuy}
+          onPress={() => dispatch({ type: 'buyEgg', nextColor: randomPrimary(), roll: Math.random() })}>
+          {/* Sıradaki yumurtanın rengi önceden görünür, çocuk plan yapabilsin. */}
+          <View style={[styles.nextColor, { backgroundColor: COLOR_HEX[state.nextEggColor] }]} />
+          <Text style={styles.buyTitle}>{gridFull ? 'Alan dolu' : 'Yumurta'}</Text>
+          <Text style={styles.buyPrice}>🪙 {formatNumber(price)}</Text>
+        </Pressable>
 
-      {celebrating !== undefined && (
-        <NewAnimalModal key={celebrating} level={celebrating} onClose={() => dispatch({ type: 'dismissNewAnimal' })} />
+        <Pressable style={styles.upgradeButton} onPress={() => setUpgradesOpen(true)}>
+          <Text style={styles.upgradeIcon}>⭐</Text>
+          <Text style={styles.upgradeTitle}>Yükselt</Text>
+          {upgradeReady && <View style={styles.badge} />}
+        </Pressable>
+      </View>
+
+      {upgradesOpen && (
+        <UpgradesPanel
+          gold={state.gold}
+          levels={state.upgrades}
+          onBuy={(id) => {
+            dispatch({ type: 'buyUpgrade', id });
+            haptic('success');
+          }}
+          onClose={() => setUpgradesOpen(false)}
+        />
+      )}
+
+      {/* Önce "sen yokken" altını, sonra yeni hayvan kutlamaları gösterilir. */}
+      {state.awayGold > 0 ? (
+        <AwayGoldModal amount={state.awayGold} onClose={() => dispatch({ type: 'dismissAwayGold' })} />
+      ) : (
+        celebrating !== undefined && (
+          <NewAnimalModal
+            key={celebrating}
+            level={celebrating}
+            onClose={() => dispatch({ type: 'dismissNewAnimal' })}
+          />
+        )
       )}
     </SafeAreaView>
   );
@@ -178,13 +236,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     opacity: 0.15,
   },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+  },
   buyButton: {
-    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginVertical: 12,
-    paddingHorizontal: 28,
+    paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 22,
     backgroundColor: '#FFC93C',
@@ -210,5 +273,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#5B3A1E',
+  },
+  upgradeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 22,
+    backgroundColor: '#B983FF',
+    borderBottomWidth: 4,
+    borderBottomColor: '#8A4FFF',
+  },
+  upgradeIcon: {
+    fontSize: 18,
+  },
+  upgradeTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: 'white',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF4D4D',
+    borderWidth: 2,
+    borderColor: 'white',
   },
 });

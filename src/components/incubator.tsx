@@ -1,7 +1,6 @@
 import { StyleSheet, Text, View, type HostInstance } from 'react-native';
 
 import { EggView } from '@/components/egg-view';
-import { PARK_LIMIT } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import type { IncubatorSlot } from '@/game/state';
 
@@ -9,16 +8,22 @@ type Props = {
   slots: (IncubatorSlot | null)[];
   now: number;
   parkCount: number;
+  parkLimit: number;
   /** Her yuva bir bırakma alanıdır; ekran onları bu fonksiyonla kaydeder. */
   zoneRef: (id: string) => (view: HostInstance | null) => void;
 };
 
-export function Incubator({ slots, now, parkCount, zoneRef }: Props) {
+export function Incubator({ slots, now, parkCount, parkLimit, zoneRef }: Props) {
+  // 2'den fazla yuva varsa ikişer ikişer alt alta dizilir, yoksa telefonda sığmaz.
+  const compact = slots.length > 2;
   return (
     <View style={styles.row}>
       {slots.map((slot, i) => (
-        <View key={i} ref={zoneRef(`slot-${i}`)} style={[styles.slot, !slot && styles.emptySlot]}>
-          {slot ? <SlotContent slot={slot} now={now} parkFull={parkCount >= PARK_LIMIT} /> : <EmptySlot />}
+        <View
+          key={i}
+          ref={zoneRef(`slot-${i}`)}
+          style={[styles.slot, compact && styles.compactSlot, !slot && styles.emptySlot]}>
+          {slot ? <SlotContent slot={slot} now={now} parkFull={parkCount >= parkLimit} /> : <EmptySlot />}
         </View>
       ))}
     </View>
@@ -57,12 +62,14 @@ function EmptySlot() {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginHorizontal: 12,
     marginTop: 10,
   },
   slot: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '40%',
     height: 84,
     borderRadius: 18,
     backgroundColor: '#FFE7B8',
@@ -72,6 +79,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     gap: 8,
+  },
+  compactSlot: {
+    height: 64,
   },
   emptySlot: {
     borderStyle: 'dashed',

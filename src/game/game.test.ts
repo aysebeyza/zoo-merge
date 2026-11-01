@@ -2,8 +2,18 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { mixVariants, plainVariant } from './colors.ts';
-import { ANIMALS, eggPrice, FIRST_HATCH_SEC, PARK_LIMIT, START_GOLD } from './config.ts';
+import {
+  ANIMALS,
+  eggPrice,
+  FIRST_HATCH_SEC,
+  OFFLINE_EARNING_CAP_SEC,
+  PARK_LIMIT,
+  START_GOLD,
+  upgradeFor,
+  type UpgradeId,
+} from './config.ts';
 import { formatDuration, formatNumber } from './format.ts';
+import { parseSave, SAVE_VERSION, serializeSave } from './save.ts';
 import { createInitialState, gameReducer, type Egg, type GameState } from './state.ts';
 
 const T0 = 1_000_000;
@@ -136,6 +146,172 @@ describe('kuluçka ve park', () => {
     state = gameReducer(state, { type: 'releaseAnimal', id: state.park[0].id });
     assert.equal(state.park.length, 0);
     assert.equal(state.gold - before, 60);
+  });
+});
+
+/** Parkta bir civcivi olan oyun; civciv 2 saniyede 2 altın düşürür. Dönen zaman, civcivin çıktığı an. */
+function withChick(): { state: GameState; hatchAt: number } {
+  let state = withGrid(createInitialState(T0, 'red'), { 0: egg(1, 1) });
+  state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
+  const hatchAt = T0 + FIRST_HATCH_SEC * 1000;
+  state = gameReducer(state, { type: 'tick', now: hatchAt });
+  return { state, hatchAt };
+}
+
+describe('oyun kapalıyken', () => {
+  it('kısa aralıklarda "sen yokken" ekranı çıkmaz', () => {
+    const { state, hatchAt } = withChick();
+    const next = gameReducer(state, { type: 'tick', now: hatchAt + 10_000 });
+    assert.equal(next.awayGold, 0);
+  });
+
+  it('uzak kalınca biriken altın verilir ve ekranda gösterilir', () => {
+    const { state, hatchAt } = withChick();
+    const next = gameReducer(state, { type: 'tick', now: hatchAt + 10 * 60_000 });
+    assert.equal(next.gold - state.gold, 600);
+    assert.equal(next.awayGold, 600);
+    assert.equal(gameReducer(next, { type: 'dismissAwayGold' }).awayGold, 0);
+  });
+
+  it('en fazla 2 saatlik altın birikir, sonra hayvan normal düzenine döner', () => {
+    const { state, hatchAt } = withChick();
+    const away = hatchAt + 5 * 60 * 60_000;
+    const back = gameReducer(state, { type: 'tick', now: away });
+    assert.equal(back.gold - state.gold, OFFLINE_EARNING_CAP_SEC);
+    const later = gameReducer(back, { type: 'tick', now: away + 2000 });
+    assert.equal(later.gold - back.gold, 2);
+  });
+
+  it('kuluçka oyun kapalıyken de sürer', () => {
+    let state = { ...withGrid(createInitialState(T0, 'red'), { 0: egg(1, 2) }), firstHatchDone: true };
+    state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
+    state = gameReducer(state, { type: 'tick', now: T0 + ANIMALS[1].incubationSec * 1000 + 60 * 60_000 });
+    assert.equal(state.park.length, 1);
+    assert.equal(state.incubator[0], null);
+  });
+});
+
+/** Yükseltmeleri verilen seviyelere getirir; bedeli ödenmiş sayılır. */
+function withUpgrades(state: GameState, levels: Partial<Record<UpgradeId, number>>): GameState {
+  let next = state;
+  for (const [id, level] of Object.entries(levels) as [UpgradeId, number][]) {
+    for (let i = 0; i < level; i++) {
+      next = gameReducer({ ...next, gold: next.gold + upgradeFor(id).costs[i] }, { type: 'buyUpgrade', id });
+    }
+  }
+  return next;
+}
+
+describe('yükseltmeler', () => {
+  it('altın yetince alınır, bedeli düşer, seviye artar', () => {
+    const cost = upgradeFor('moreVisitors').costs[0];
+    const state = { ...createInitialState(T0, 'red'), gold: cost + 5 };
+    const next = gameReducer(state, { type: 'buyUpgrade', id: 'moreVisitors' });
+    assert.equal(next.upgrades.moreVisitors, 1);
+    assert.equal(next.gold, 5);
+  });
+
+  it('altın yetmezse ya da en üst seviyedeyse alınamaz', () => {
+    const poor = { ...createInitialState(T0, 'red'), gold: 0 };
+    assert.equal(gameReducer(poor, { type: 'buyUpgrade', id: 'autoEgg' }), poor);
+    const maxed = withUpgrades(createInitialState(T0, 'red'), { autoEgg: upgradeFor('autoEgg').costs.length });
+    const rich = { ...maxed, gold: 1e12 };
+    assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'autoEgg' }), rich);
+  });
+
+  it('otomatik yumurta aralıklarla boş kutuya düşer, alan doluysa bekler', () => {
+    let state = withUpgrades(createInitialState(T0, 'red'), { autoEgg: 1 });
+    state = gameReducer(state, { type: 'tick', now: T0 + 29_999, eggColor: 'blue' });
+    assert.equal(state.grid[0], null);
+    state = gameReducer(state, { type: 'tick', now: T0 + 30_000, eggColor: 'blue' });
+    assert.equal(state.grid[0]?.level, 1);
+    assert.equal(state.grid[0]?.variant.color, 'blue');
+
+    const full = { ...state, grid: state.grid.map((_, i) => egg(200 + i, 3)) };
+    const waited = gameReducer(full, { type: 'tick', now: T0 + 60_000 });
+    assert.equal(waited.nextAutoEggAt, T0 + 90_000);
+  });
+
+  it('uzun süre uzak kalınca otomatik yumurtalar yalnızca alan dolana kadar gelir', () => {
+    let state = withUpgrades(createInitialState(T0, 'red'), { autoEgg: 3 });
+    for (let t = 1; t <= 30; t++) state = gameReducer(state, { type: 'tick', now: T0 + 60 * 60_000 + t });
+    assert.equal(state.grid.includes(null), false);
+  });
+
+  it('daha iyi yumurta, şans tutunca 2. seviyeden başlar', () => {
+    const state = withUpgrades(createInitialState(T0, 'red'), { betterEgg: 1 });
+    assert.equal(gameReducer(state, { type: 'buyEgg', nextColor: 'red', roll: 0.1 }).grid[0]?.level, 2);
+    assert.equal(gameReducer(state, { type: 'buyEgg', nextColor: 'red', roll: 0.9 }).grid[0]?.level, 1);
+  });
+
+  it('daha çok ziyaretçi altın kazancını artırır', () => {
+    const { state, hatchAt } = withChick();
+    const boosted = withUpgrades(state, { moreVisitors: 5 });
+    const before = boosted.gold;
+    const next = gameReducer(boosted, { type: 'tick', now: hatchAt + 10_000 });
+    // Civciv 2 altın yerine 3 altın (2 x 1,5) düşürür; 10 saniyede 5 kez.
+    assert.equal(next.gold - before, 15);
+  });
+
+  it('kuluçka makinesi süreyi kısaltır', () => {
+    let state = { ...withGrid(createInitialState(T0, 'red'), { 0: egg(1, 2) }), firstHatchDone: true };
+    state = withUpgrades(state, { fasterIncubator: 5 });
+    state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
+    assert.equal(state.incubator[0]?.durationMs, ANIMALS[1].incubationSec * 1000 * 0.5);
+  });
+
+  it('yeni kuluçka yuvası ve daha büyük park kapasiteyi artırır', () => {
+    let state = withUpgrades(createInitialState(T0, 'red'), { incubatorSlot: 2, biggerPark: 1 });
+    assert.equal(state.incubator.length, 4);
+    state = withGrid(state, { 0: egg(1, 1) });
+    state = gameReducer(state, { type: 'incubate', from: 0, slot: 3 });
+    const full = Array.from({ length: PARK_LIMIT }, (_, i) => ({
+      id: 500 + i,
+      level: 1,
+      variant: plainVariant('red'),
+      nextDropAt: Infinity,
+      lastDropAt: null,
+      lastDropAmount: 0,
+    }));
+    state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
+    assert.equal(state.park.length, PARK_LIMIT + 1);
+  });
+});
+
+describe('kayıt', () => {
+  it('kaydedilen oyun aynen geri yüklenir', () => {
+    const { state } = withChick();
+    assert.deepEqual(parseSave(serializeSave(state), 'blue'), state);
+  });
+
+  it('kayıt yoksa, bozuksa ya da sürümü farklıysa null döner', () => {
+    assert.equal(parseSave(null, 'red'), null);
+    assert.equal(parseSave('{bozuk', 'red'), null);
+    assert.equal(parseSave(JSON.stringify({ version: SAVE_VERSION + 1, state: {} }), 'red'), null);
+  });
+
+  it('eski kayıtta olmayan alanlar başlangıç değerini alır', () => {
+    const { state } = withChick();
+    const { awayGold: _, ...old } = state;
+    const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }), 'red');
+    assert.equal(loaded?.awayGold, 0);
+    assert.equal(loaded?.gold, state.gold);
+  });
+
+  it('yükseltmeler kaydedilir; eski kayıtta olmayan yükseltmeler 0 olur', () => {
+    const state = withUpgrades(createInitialState(T0, 'red'), { incubatorSlot: 1, autoEgg: 2 });
+    assert.deepEqual(parseSave(serializeSave(state), 'red'), state);
+    const { upgrades: _, ...old } = createInitialState(T0, 'red');
+    const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }), 'red');
+    assert.equal(loaded?.upgrades.betterEgg, 0);
+  });
+
+  it('yüklenen oyun, kapalı kalınan sürenin altınını alır', () => {
+    const { state, hatchAt } = withChick();
+    const loaded = parseSave(serializeSave(state), 'red')!;
+    let next = gameReducer(createInitialState(hatchAt + 60 * 60_000, 'red'), { type: 'load', state: loaded });
+    next = gameReducer(next, { type: 'tick', now: hatchAt + 60 * 60_000 });
+    assert.equal(next.awayGold, 3600);
   });
 });
 

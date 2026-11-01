@@ -8,6 +8,8 @@ import { goldPerSecond, releaseValue, type ParkAnimal } from '@/game/state';
 
 type Props = {
   animals: ParkAnimal[];
+  /** "Daha çok ziyaretçi" yükseltmesinin kazanç çarpanı. */
+  incomeBonus: number;
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onRelease: (id: number) => void;
@@ -21,7 +23,7 @@ const DECORATIONS = [
   { emoji: '🪨', top: '48%', left: '90%' },
 ] as const;
 
-export function Park({ animals, selectedId, onSelect, onRelease }: Props) {
+export function Park({ animals, incomeBonus, selectedId, onSelect, onRelease }: Props) {
   const [area, setArea] = useState({ width: 0, height: 0 });
   const selected = animals.find((a) => a.id === selectedId) ?? null;
 
@@ -56,10 +58,10 @@ export function Park({ animals, selectedId, onSelect, onRelease }: Props) {
       {selected && (
         <View style={styles.panel}>
           <Text style={styles.panelText}>
-            {animalFor(selected.level).emoji} {animalFor(selected.level).name} · {formatNumber(goldPerSecond(selected))}/sn
+            {animalFor(selected.level).emoji} {animalFor(selected.level).name} · {formatNumber(goldPerSecond(selected, incomeBonus))}/sn
           </Text>
           <Pressable style={styles.releaseButton} onPress={() => onRelease(selected.id)}>
-            <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected))} 🪙</Text>
+            <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(selected, incomeBonus))} 🪙</Text>
           </Pressable>
         </View>
       )}
