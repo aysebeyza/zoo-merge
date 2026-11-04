@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, type HostInstance, type LayoutChangeEvent } from 'react-native';
 
 import type { AnimalsTab } from '@/components/animals-panel';
 import {
@@ -8,7 +8,6 @@ import {
   FULLNESS_COLOR,
   MAX_SKILL,
   moodFor,
-  SHINY_COLOR,
   skillFor,
   type Mood,
 } from '@/game/config';
@@ -32,6 +31,8 @@ type Props = {
   food: Record<number, number>;
   onFeed: (id: number) => void;
   onOpenAnimals: (tab: AnimalsTab) => void;
+  /** Rehberin eli Hayvanlarım düğmesini gösterebilsin diye düğmenin yeri ölçülür ("animals"). */
+  targetRef: (id: string) => (view: HostInstance | null) => void;
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onRelease: (id: number) => void;
@@ -85,6 +86,7 @@ export function Park({
   food,
   onFeed,
   onOpenAnimals,
+  targetRef,
   selectedId,
   onSelect,
   onRelease,
@@ -133,7 +135,7 @@ export function Park({
         ))}
 
       {animals.length > 0 && (
-        <Pressable style={styles.myAnimals} onPress={() => onOpenAnimals('animals')}>
+        <Pressable ref={targetRef('animals')} style={styles.myAnimals} onPress={() => onOpenAnimals('animals')}>
           <Text style={styles.myAnimalsText}>🐾 Hayvanlarım</Text>
           {someoneHungry && <View style={styles.dot} />}
         </Pressable>
@@ -307,18 +309,11 @@ function WanderingAnimal({ animal, fullness, restX, skillReady, area, selected, 
         {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
         {skillReady && <Text style={styles.skillBubble}>⭐</Text>}
         {animal.variant.shiny && <Text style={[styles.shinySparkle, { top: size * 0.35 }]}>✨</Text>}
+        {/* Seçili hayvanın arkasında yumuşak bir ışık; panelde hangi hayvanın anlatıldığı belli olsun. */}
+        {selected && (
+          <View style={[styles.selectedGlow, { width: size * 1.3, height: size * 1.3, borderRadius: size }]} />
+        )}
         <Text style={{ fontSize: size, opacity: mood === 'leaving' ? 0.6 : 1 }}>{animalFor(animal.level).emoji}</Text>
-        <View
-          style={[
-            styles.groundMark,
-            {
-              width: size * 0.9,
-              // Hayvanın altındaki iz, yumurtasının rengi; parlak hayvanınki altın sarısı.
-              backgroundColor: animal.variant.shiny ? SHINY_COLOR : animalFor(animal.level).eggColor,
-              borderWidth: selected ? 2 : 0,
-            },
-          ]}
-        />
         {/* Küçük tokluk çubuğu: çocuk dokunmadan, bir bakışta kimin acıktığını görsün. */}
         <View style={[styles.miniBar, { width: size * 0.8 }]}>
           <View
@@ -384,11 +379,11 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
   },
-  groundMark: {
-    height: 8,
-    marginTop: -6,
-    borderRadius: 8,
-    opacity: 0.7,
+  selectedGlow: {
+    position: 'absolute',
+    top: -4,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 2,
     borderColor: 'white',
   },
   coinPop: {

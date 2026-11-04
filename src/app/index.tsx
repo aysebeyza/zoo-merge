@@ -12,8 +12,10 @@ import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { Park } from '@/components/park';
+import { ParentGate } from '@/components/parent-gate';
+import { TutorialOverlay } from '@/components/tutorial-overlay';
 import { UpgradesPanel } from '@/components/upgrades-panel';
-import { GRID_COLUMNS, UPGRADES } from '@/game/config';
+import { GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import {
   basketCap,
@@ -26,6 +28,7 @@ import {
   stateIncomeBonus,
   stateParkLimit,
 } from '@/game/state';
+import { tutorialHint } from '@/game/tutorial';
 import { useGameSave } from '@/hooks/use-game-save';
 import { findDropZone, type Rect } from '@/lib/drop-zone';
 
@@ -45,6 +48,8 @@ export default function GameScreen() {
   const [draggingFrom, setDraggingFrom] = useState<number | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<number | null>(null);
   const [upgradesOpen, setUpgradesOpen] = useState(false);
+  /** "Oyunu baştan başlat"a basıldı; ebeveyn kapısı açık. */
+  const [resetAsked, setResetAsked] = useState(false);
   /** Hayvanlarım ekranı açıksa hangi sekmede açıldığı; kapalıysa null. */
   const [animalsTab, setAnimalsTab] = useState<AnimalsTab | null>(null);
   /** Mini oyunla hızlandırılan kuluçka yuvası; oyun açık değilse null. */
@@ -84,6 +89,34 @@ export default function GameScreen() {
       view.measureInWindow((x, y, w, h) => zoneRects.current.set(id, { x, y, width: w, height: h }));
     });
   };
+  // İlk oyun rehberi: elin göstereceği yerler bırakma alanları ile sepet ve Hayvanlarım düğmeleri.
+  // Rehber açıkken yerler yarım saniyede bir ölçülür (ekran düzeni değişebilir).
+  const hint = tutorialHint(state, animalsTab !== null);
+  const hintActive = hint !== null;
+  const targetViews = useRef(new Map<string, HostInstance>());
+  const targetRef = (id: string) => (view: HostInstance | null) => {
+    if (view) targetViews.current.set(id, view);
+    else targetViews.current.delete(id);
+  };
+  const [hintRects, setHintRects] = useState(() => new Map<string, Rect>());
+  useEffect(() => {
+    if (!hintActive) return;
+    const measureAll = () => {
+      const views = [...zoneViews.current, ...targetViews.current];
+      const next = new Map<string, Rect>();
+      let pending = views.length;
+      views.forEach(([id, view]) =>
+        view.measureInWindow((x, y, w, h) => {
+          next.set(id, { x, y, width: w, height: h });
+          if (--pending === 0) setHintRects(next);
+        }),
+      );
+    };
+    measureAll();
+    const timer = setInterval(measureAll, 500);
+    return () => clearInterval(timer);
+  }, [hintActive]);
+
   // Parmağın ucu değil, sürüklenen yumurtanın ortası sayılır: ekranda nereye bırakıldığı görünüyorsa oraya düşer.
   const handleDrop = (from: number, dx: number, dy: number) => {
     const start = zoneRects.current.get(`cell-${from}`);
@@ -139,6 +172,7 @@ export default function GameScreen() {
           dispatch({ type: 'feedAnimal', id });
           haptic('success');
         }}
+        targetRef={targetRef}
         onOpenAnimals={(tab) => {
           setSelectedAnimal(null);
           setAnimalsTab(tab);
@@ -189,6 +223,7 @@ export default function GameScreen() {
       <View style={styles.actions}>
         {/* Yumurta sepeti: dokununca sepetten bir yumurta alana gelir. Tavuk Anne zamanla doldurur. */}
         <Pressable
+          ref={targetRef('basket')}
           style={[styles.buyButton, !canTake && styles.buyDisabled]}
           disabled={!canTake}
           onPress={() => dispatch({ type: 'takeEgg', roll: Math.random(), shinyRoll: Math.random() })}>
@@ -222,6 +257,9 @@ export default function GameScreen() {
         </Pressable>
       )}
 
+      {/* Sürüklerken el kaybolur; çocuk yaptığı işe baksın. */}
+      {hint && draggingFrom === null && <TutorialOverlay hint={hint} rects={hintRects} />}
+
       {upgradesOpen && (
         <UpgradesPanel
           gold={state.gold}
@@ -231,7 +269,21 @@ export default function GameScreen() {
             dispatch({ type: 'buyUpgrade', id });
             haptic('success');
           }}
+          onReset={() => setResetAsked(true)}
           onClose={() => setUpgradesOpen(false)}
+        />
+      )}
+
+      {resetAsked && (
+        <ParentGate
+          message="Oyun baştan başlayacak; bütün hayvanlar, yumurtalar ve altın silinecek."
+          onConfirm={() => {
+            dispatch({ type: 'reset', now: Date.now() });
+            setResetAsked(false);
+            setUpgradesOpen(false);
+            setSelectedAnimal(null);
+          }}
+          onCancel={() => setResetAsked(false)}
         />
       )}
 
@@ -253,7 +305,12 @@ export default function GameScreen() {
             haptic('success');
           }}
           onRelease={(id) => dispatch({ type: 'releaseAnimal', id })}
-          onClose={() => setAnimalsTab(null)}
+          targetRef={targetRef}
+          onClose={() => {
+            setAnimalsTab(null);
+            // Rehberin son adımı: hayvanlar beslendi, "Aferin!" yazısından sonra panel kapanınca rehber biter.
+            if (state.tutorialStep !== null && state.tutorialStep > TUTORIAL_ANIMALS) dispatch({ type: 'finishTutorial' });
+          }}
         />
       )}
 

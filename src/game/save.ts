@@ -52,6 +52,8 @@ export function parseSave(json: string | null): GameState | null {
     ...fresh,
     ...rest,
     gold: saved.gold + refund,
+    // Rehber gelmeden önce başlamış oyunlar rehberi görmez.
+    tutorialStep: 'tutorialStep' in saved ? saved.tutorialStep : null,
     upgrades,
     food: saved.food ?? {},
     // Eski kayıtlarda olmayan hayvan alanları: tokluk ve parka çıkış anı kaydın yapıldığı an, yetenek 0.

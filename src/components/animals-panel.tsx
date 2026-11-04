@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type HostInstance } from 'react-native';
 
 import { animalFor, foodPrice, FULLNESS_COLOR, HUNGER_SEC, MAX_SKILL, moodFor, skillFor } from '@/game/config';
 import { formatNumber, formatWait } from '@/game/format';
@@ -31,6 +31,8 @@ type Props = {
   onUpgradeSkill: (id: number) => void;
   onRelease: (id: number) => void;
   onClose: () => void;
+  /** İlk oyun rehberinin eli bu düğmeleri gösterir: "feed-<id>" (Besle) ve "animals-close" (kapat). */
+  targetRef: (id: string) => (view: HostInstance | null) => void;
 };
 
 /** Hayvanlarım: parktaki bütün hayvanlar tek tek; ikinci sekmede yem dükkanı. */
@@ -43,6 +45,7 @@ export function AnimalsPanel({
   onUpgradeSkill,
   onRelease,
   onClose,
+  targetRef,
 }: Props) {
   const [tab, setTab] = useState<AnimalsTab>(initialTab);
   // En aç hayvan en üstte: çocuk kimi beslemesi gerektiğini hemen görsün.
@@ -55,7 +58,7 @@ export function AnimalsPanel({
         <View style={styles.header}>
           <Text style={styles.title}>Hayvanlarım</Text>
           <Text style={styles.gold}>🪙 {formatNumber(state.gold)}</Text>
-          <Pressable style={styles.close} onPress={onClose} hitSlop={10}>
+          <Pressable ref={targetRef('animals-close')} style={styles.close} onPress={onClose} hitSlop={10}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
         </View>
@@ -77,6 +80,7 @@ export function AnimalsPanel({
                   onBuyFood={() => setTab('food')}
                   onUpgradeSkill={() => onUpgradeSkill(animal.id)}
                   onRelease={() => onRelease(animal.id)}
+                  feedRef={targetRef(`feed-${animal.id}`)}
                 />
               ))
             ))}
@@ -112,9 +116,10 @@ type AnimalRowProps = {
   onBuyFood: () => void;
   onUpgradeSkill: () => void;
   onRelease: () => void;
+  feedRef: (view: HostInstance | null) => void;
 };
 
-function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease }: AnimalRowProps) {
+function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease, feedRef }: AnimalRowProps) {
   const config = animalFor(animal.level);
   const bonus = stateIncomeBonus(state);
   const fullness = fullnessAt(animal, state.now);
@@ -158,6 +163,7 @@ function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease
       <View style={styles.actions}>
         {stock > 0 ? (
           <Pressable
+            ref={feedRef}
             style={[styles.button, styles.feed, !canFeed(state, animal) && styles.disabled]}
             disabled={!canFeed(state, animal)}
             onPress={onFeed}>

@@ -1,6 +1,7 @@
 // Oyunun durumu ve kuralları. Arayüzden bağımsızdır, bu yüzden testlerle denenebilir.
 // Rastgelelik ve saat dışarıdan verilir (action içinde), böylece reducer saf kalır.
 
+import { tutorialAllows } from './tutorial.ts';
 import { goldMultiplier, mixVariants, newVariant, type Variant } from './variant.ts';
 import {
   animalFor,
@@ -14,6 +15,7 @@ import {
   FEED_BELOW,
   FIRST_HATCH_SEC,
   foodPrice,
+  TUTORIAL_ANIMALS,
   GRID_SIZE,
   HUNGER_SEC,
   hungerMultiplier,
@@ -95,6 +97,11 @@ export type GameState = {
   escapedQueue: number[];
   /** Yem stoğu: hayvan seviyesine göre kaç yem var (1 = tohum, 2 = havuç ...). */
   food: Record<number, number>;
+  /**
+   * İlk oyun rehberinin adımı: 1-3 o seviyedeki hayvanı çıkarmak (civciv, tavşan, kedi),
+   * TUTORIAL_ANIMALS + 1 Hayvanlarım ekranını açmak; rehber bittiyse null.
+   */
+  tutorialStep: number | null;
 };
 
 export type GameAction =
@@ -121,6 +128,10 @@ export type GameAction =
   | { type: 'buyMissingFood' }
   /** Hediye kutusundaki ilk yumurtayı birleştirme alanına alır. */
   | { type: 'takeGift' }
+  /** Rehberin son adımı (Hayvanlarım ekranı açıldı) bitti. */
+  | { type: 'finishTutorial' }
+  /** Oyunu baştan başlatır (ebeveyn onayından sonra); rehber de yeniden gösterilir. */
+  | { type: 'reset'; now: number }
   | { type: 'dismissNewAnimal' }
   | { type: 'dismissAwayGold' }
   | { type: 'dismissEscaped' };
@@ -144,6 +155,7 @@ export function createInitialState(now: number): GameState {
     giftBox: [],
     escapedQueue: [],
     food: {},
+    tutorialStep: 1,
   };
 }
 
@@ -283,6 +295,12 @@ export function canMerge(a: Egg, b: Egg): boolean {
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  // Rehberde elin göstermediği hamle hiçbir şey yapmaz (yumurta yerine geri döner).
+  if (!tutorialAllows(state, action)) return state;
+  return applyAction(state, action);
+}
+
+function applyAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'load':
       return action.state;
@@ -356,9 +374,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'incubate': {
       const egg = state.grid[action.from];
       if (!egg || state.incubator[action.slot] !== null) return state;
+      // İlk civciv ve rehber sürerken rehberin hayvanları (civciv, tavşan, kedi) hemen çıkar.
       const firstHatch = !state.firstHatchDone && egg.level === 1;
-      const seconds = firstHatch
-        ? FIRST_HATCH_SEC
+      const tutorialHatch =
+        state.tutorialStep !== null && state.tutorialStep <= TUTORIAL_ANIMALS && egg.level <= TUTORIAL_ANIMALS;
+      const seconds =
+        firstHatch || tutorialHatch
+          ? FIRST_HATCH_SEC
         : animalFor(egg.level).incubationSec * incubationFactor(state.upgrades.fasterIncubator);
       const grid = [...state.grid];
       grid[action.from] = null;
@@ -378,7 +400,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'dismissNewAnimal':
-      return { ...state, newAnimalQueue: state.newAnimalQueue.slice(1) };
+      return advanceTutorial({ ...state, newAnimalQueue: state.newAnimalQueue.slice(1) });
+
+    case 'finishTutorial':
+      return state.tutorialStep === null ? state : { ...state, tutorialStep: null };
+
+    case 'reset':
+      return createInitialState(action.now);
 
     case 'boostIncubation': {
       const slot = state.incubator[action.slot];
@@ -552,7 +580,7 @@ function tick(state: GameState, now: number): GameState {
     return null;
   });
 
-  return {
+  return advanceTutorial({
     ...state,
     now,
     gold,
@@ -568,5 +596,33 @@ function tick(state: GameState, now: number): GameState {
     awayGold,
     giftBox,
     escapedQueue,
-  };
+  });
+}
+
+/**
+ * Rehber: bu adımın hayvanı çıktı ve kutlaması kapandıysa bir sonraki adıma geçilir. Kutlama kapanır
+ * kapanmaz da çağrılır; yoksa arada el aynı hayvanı ikinci kez çıkarttırır.
+ */
+function advanceTutorial(state: GameState): GameState {
+  const step = state.tutorialStep;
+  if (
+    step !== null &&
+    step <= TUTORIAL_ANIMALS &&
+    state.discovered.includes(step) &&
+    state.newAnimalQueue.length === 0
+  ) {
+    if (step < TUTORIAL_ANIMALS) return { ...state, tutorialStep: step + 1 };
+    // Üç hayvan da çıktı: son adımda çocuk onları besleyecek. Tok hayvan beslenemez, o yüzden biraz
+    // acıkırlar; her birine birer yem hediye.
+    const food = { ...state.food };
+    for (let level = 1; level <= TUTORIAL_ANIMALS; level++) food[level] = foodStock(state, level) + 1;
+    const hungryFedAt = state.now - (1 - HUNGRY_BELOW + 0.05) * HUNGER_SEC * 1000;
+    return {
+      ...state,
+      tutorialStep: step + 1,
+      food,
+      park: state.park.map((a) => (a.level <= TUTORIAL_ANIMALS ? { ...a, fedAt: Math.min(a.fedAt, hungryFedAt) } : a)),
+    };
+  }
+  return state;
 }

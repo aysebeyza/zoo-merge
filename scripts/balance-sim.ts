@@ -155,7 +155,8 @@ function simulate(isPlaying: (t: number) => boolean, maxMs: number): Simulation 
   purchases = [];
   const earnedByDay: number[] = [];
   const start = 8 * HOUR; // 1. gün, sabah 08:00
-  let s = createInitialState(start);
+  // Rehber elle oynanır; simülasyon onu atlar (rehberde yalnızca elin gösterdiği hamle yapılabilir).
+  let s = gameReducer(createInitialState(start), { type: 'finishTutorial' });
   let played = 0;
   const found: Result = [];
   let wasPlaying = true;
@@ -220,11 +221,11 @@ function reportDays(sim: Simulation) {
   });
 }
 
-const continuous = simulate(() => true, 3 * DAY);
+const continuous = simulate(() => true, 10 * DAY);
 report('Aralıksız oynayan', continuous.found, continuous.state, false);
 
 // 08:00, 15:00, 20:00'de 20'şer dakika (başlangıç 08:00 olduğu için 0, 7 ve 12. saatler).
 const sessions = [0, 7 * HOUR, 12 * HOUR];
-const daily = simulate((t) => sessions.some((s) => t % DAY >= s && t % DAY < s + 20 * MIN), 10 * DAY);
+const daily = simulate((t) => sessions.some((s) => t % DAY >= s && t % DAY < s + 20 * MIN), 30 * DAY);
 report('Günde 3 kez 20 dakika oynayan', daily.found, daily.state, true);
 reportDays(daily);

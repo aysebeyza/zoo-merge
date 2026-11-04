@@ -8,10 +8,12 @@ type Props = {
   diamonds: number;
   levels: Record<UpgradeId, number>;
   onBuy: (id: UpgradeId) => void;
+  /** Oyunu baştan başlatmak isteniyor; ebeveyn onayını çağıran taraf ister. */
+  onReset: () => void;
   onClose: () => void;
 };
 
-export function UpgradesPanel({ gold, diamonds, levels, onBuy, onClose }: Props) {
+export function UpgradesPanel({ gold, diamonds, levels, onBuy, onReset, onClose }: Props) {
   return (
     <View style={styles.overlay}>
       <View style={styles.sheet}>
@@ -33,6 +35,10 @@ export function UpgradesPanel({ gold, diamonds, levels, onBuy, onClose }: Props)
               onBuy={() => onBuy(upgrade.id)}
             />
           ))}
+          {/* Listenin en altında ve sönük: çocuğun yanlışlıkla basacağı yerde değil; ebeveyn kapısı da sorar. */}
+          <Pressable style={styles.reset} onPress={onReset}>
+            <Text style={styles.resetText}>🔄 Oyunu baştan başlat</Text>
+          </Pressable>
         </ScrollView>
       </View>
     </View>
@@ -128,6 +134,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: '#5B3A1E',
+  },
+  reset: {
+    alignSelf: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resetText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#B89A70',
   },
   list: {
     gap: 10,

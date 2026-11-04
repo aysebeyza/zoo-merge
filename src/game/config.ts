@@ -16,18 +16,20 @@ export type AnimalConfig = {
   food: { emoji: string; name: string };
 };
 
+// Altın kazancı dokümandaki tablonun yaklaşık 10'da 1'i: oyuncular bir günde 20 milyona ulaşıyordu.
+// Seviyeler arasındaki oran (yaklaşık 2,2 kat) korunur; küçükler sık, büyükler seyrek düşürür.
 // prettier-ignore
 export const ANIMALS: readonly AnimalConfig[] = [
-  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 2, dropAmount: 2, incubationSec: 10, eggColor: '#FFD93D', food: { emoji: '🌾', name: 'Tohum' } },
-  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 2, dropAmount: 5, incubationSec: 30, eggColor: '#FF9EC4', food: { emoji: '🥕', name: 'Havuç' } },
-  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 2, dropAmount: 11, incubationSec: 90, eggColor: '#FF9F45', food: { emoji: '🐟', name: 'Balık' } },
-  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 3, dropAmount: 36, incubationSec: 4 * 60, eggColor: '#C68B59', food: { emoji: '🦴', name: 'Kemik' } },
-  { level: 5, name: 'Panda', emoji: '🐼', dropEverySec: 3, dropAmount: 80, incubationSec: 8 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
-  { level: 6, name: 'Penguen', emoji: '🐧', dropEverySec: 3, dropAmount: 180, incubationSec: 15 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
-  { level: 7, name: 'Zürafa', emoji: '🦒', dropEverySec: 4, dropAmount: 540, incubationSec: 30 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
-  { level: 8, name: 'Fil', emoji: '🐘', dropEverySec: 4, dropAmount: 1200, incubationSec: 60 * 60, eggColor: '#B983FF', food: { emoji: '🍌', name: 'Muz' } },
-  { level: 9, name: 'Aslan', emoji: '🦁', dropEverySec: 4, dropAmount: 2700, incubationSec: 2 * 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥩', name: 'Et' } },
-  { level: 10, name: 'Ejderha', emoji: '🐉', dropEverySec: 5, dropAmount: 7500, incubationSec: 4 * 60 * 60, eggColor: '#2EC4B6', food: { emoji: '🌶️', name: 'Biber' } },
+  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 10, dropAmount: 1, incubationSec: 10, eggColor: '#FFD93D', food: { emoji: '🌾', name: 'Tohum' } },
+  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 8, dropAmount: 2, incubationSec: 30, eggColor: '#FF9EC4', food: { emoji: '🥕', name: 'Havuç' } },
+  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 6, dropAmount: 3, incubationSec: 90, eggColor: '#FF9F45', food: { emoji: '🐟', name: 'Balık' } },
+  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 6, dropAmount: 7, incubationSec: 4 * 60, eggColor: '#C68B59', food: { emoji: '🦴', name: 'Kemik' } },
+  { level: 5, name: 'Panda', emoji: '🐼', dropEverySec: 6, dropAmount: 16, incubationSec: 8 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
+  { level: 6, name: 'Penguen', emoji: '🐧', dropEverySec: 6, dropAmount: 36, incubationSec: 15 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
+  { level: 7, name: 'Zürafa', emoji: '🦒', dropEverySec: 8, dropAmount: 108, incubationSec: 30 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
+  { level: 8, name: 'Fil', emoji: '🐘', dropEverySec: 8, dropAmount: 240, incubationSec: 60 * 60, eggColor: '#B983FF', food: { emoji: '🍌', name: 'Muz' } },
+  { level: 9, name: 'Aslan', emoji: '🦁', dropEverySec: 8, dropAmount: 540, incubationSec: 2 * 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥩', name: 'Et' } },
+  { level: 10, name: 'Ejderha', emoji: '🐉', dropEverySec: 10, dropAmount: 1500, incubationSec: 4 * 60 * 60, eggColor: '#2EC4B6', food: { emoji: '🌶️', name: 'Biber' } },
 ];
 
 /** Alınan ya da bedava gelen yumurtanın nadir parlak (✨) olma şansı. Öneri; testlerde ayarlanacak. */
@@ -55,6 +57,11 @@ export const INCUBATOR_SLOTS = 2;
 export const START_GOLD = 100;
 /** Çocuk ilk hayvanını hemen görsün diye ilk kuluçka kısa. */
 export const FIRST_HATCH_SEC = 3;
+/**
+ * İlk oyunda rehber çocuğa ilk bu kadar hayvanı tek tek çıkartır (civciv, tavşan, kedi); rehber
+ * sürerken bu hayvanların kuluçkası FIRST_HATCH_SEC kadar kısadır.
+ */
+export const TUTORIAL_ANIMALS = 3;
 export const DIAMONDS_PER_NEW_ANIMAL = 5;
 
 // --- Yumurta sepeti ---
@@ -64,7 +71,7 @@ export const DIAMONDS_PER_NEW_ANIMAL = 5;
 // Sayılar simülasyonla ayarlandı (npm run sim).
 
 /** Tavuk Anne yükseltmesinin seviyesine göre kaç saniyede bir sepete yumurta düşer. */
-export const BASKET_EVERY_SEC = [90, 75, 60, 45];
+export const BASKET_EVERY_SEC = [300, 240, 180, 120];
 /** Büyük sepet yükseltmesinin seviyesine göre sepet en fazla kaç yumurta alır: 20'den başlar, 10'ar artar. */
 export const BASKET_CAP = [20, 30, 40, 50, 60];
 /** Yeni oyuna başlarken sepette kaç yumurta var; ilk hayvanlar hızlı çıksın diye sepet dolu başlar. */
@@ -142,9 +149,9 @@ export const UPGRADES: readonly UpgradeConfig[] = [
     id: 'biggerBasket',
     name: 'Büyük sepet',
     emoji: '🧺',
-    currency: 'gold',
-    // İlk seviye ilk gün alınamasın diye pahalı (npm run sim ile ölçüldü).
-    costs: [4_000_000, 12_000_000, 35_000_000, 90_000_000],
+    // Altınla milyonlar tutuyordu; elmasla alınır, ilk seviyesi 2-3 yeni hayvandan sonra.
+    currency: 'diamonds',
+    costs: [10, 20, 30, 40],
     effect: (level) => `Sepete ${BASKET_CAP[level]} yumurta sığar`,
   },
   {
