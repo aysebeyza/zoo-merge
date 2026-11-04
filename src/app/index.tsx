@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimalsPanel, type AnimalsTab } from '@/components/animals-panel';
@@ -52,11 +52,18 @@ export default function GameScreen() {
   const { width } = useWindowDimensions();
 
   useEffect(() => {
-    const timer = setInterval(
-      () => dispatch({ type: 'tick', now: Date.now() }),
-      TICK_MS,
-    );
-    return () => clearInterval(timer);
+    // Oyun ekranda değilken ilerlemez. Android arka plandaki uygulamayı bir süre çalıştırmaya devam
+    // ettiği için bu olmadan oyun kapalı sayılmaz, 2 saatlik kazanç sınırı da hiç uygulanmaz.
+    // Geri dönünce aradaki süre tek seferde işlenir (sepet, açlık, en fazla 2 saatlik kazanç).
+    const tick = () => {
+      if (AppState.currentState === 'active') dispatch({ type: 'tick', now: Date.now() });
+    };
+    const timer = setInterval(tick, TICK_MS);
+    const subscription = AppState.addEventListener('change', tick);
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
   }, []);
 
   const celebrating = state.newAnimalQueue[0];
