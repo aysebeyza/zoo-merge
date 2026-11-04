@@ -13,10 +13,11 @@ import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { Park } from '@/components/park';
 import { UpgradesPanel } from '@/components/upgrades-panel';
-import { GRID_COLUMNS, UPGRADES, upgradeCost } from '@/game/config';
+import { GRID_COLUMNS, UPGRADES } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import {
   basketCap,
+  canAffordUpgrade,
   canMerge,
   createInitialState,
   gameReducer,
@@ -103,10 +104,7 @@ export default function GameScreen() {
   const incomeBonus = stateIncomeBonus(state);
   const parkLimit = stateParkLimit(state);
   // Alınabilecek bir yükseltme varsa düğmede işaret çıkar.
-  const upgradeReady = UPGRADES.some((u) => {
-    const cost = upgradeCost(u.id, state.upgrades[u.id]);
-    return cost !== null && state.gold >= cost;
-  });
+  const upgradeReady = UPGRADES.some((u) => canAffordUpgrade(state, u.id));
 
   if (!loaded) return <SafeAreaView style={styles.screen} />;
 
@@ -220,6 +218,7 @@ export default function GameScreen() {
       {upgradesOpen && (
         <UpgradesPanel
           gold={state.gold}
+          diamonds={state.diamonds}
           levels={state.upgrades}
           onBuy={(id) => {
             dispatch({ type: 'buyUpgrade', id });

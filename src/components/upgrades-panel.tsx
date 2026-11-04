@@ -1,22 +1,24 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { UPGRADES, upgradeCost, type UpgradeConfig, type UpgradeId } from '@/game/config';
+import { CURRENCY_ICON, UPGRADES, upgradeCost, type UpgradeConfig, type UpgradeId } from '@/game/config';
 import { formatNumber } from '@/game/format';
 
 type Props = {
   gold: number;
+  diamonds: number;
   levels: Record<UpgradeId, number>;
   onBuy: (id: UpgradeId) => void;
   onClose: () => void;
 };
 
-export function UpgradesPanel({ gold, levels, onBuy, onClose }: Props) {
+export function UpgradesPanel({ gold, diamonds, levels, onBuy, onClose }: Props) {
   return (
     <View style={styles.overlay}>
       <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>Yükseltmeler</Text>
           <Text style={styles.gold}>🪙 {formatNumber(gold)}</Text>
+          <Text style={styles.gold}>💎 {formatNumber(diamonds)}</Text>
           <Pressable style={styles.close} onPress={onClose} hitSlop={10}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
@@ -27,7 +29,7 @@ export function UpgradesPanel({ gold, levels, onBuy, onClose }: Props) {
               key={upgrade.id}
               upgrade={upgrade}
               level={levels[upgrade.id]}
-              gold={gold}
+              wallet={upgrade.currency === 'diamonds' ? diamonds : gold}
               onBuy={() => onBuy(upgrade.id)}
             />
           ))}
@@ -40,13 +42,14 @@ export function UpgradesPanel({ gold, levels, onBuy, onClose }: Props) {
 type CardProps = {
   upgrade: UpgradeConfig;
   level: number;
-  gold: number;
+  /** Bu yükseltmenin parasından (altın ya da elmas) ne kadar var. */
+  wallet: number;
   onBuy: () => void;
 };
 
-function UpgradeCard({ upgrade, level, gold, onBuy }: CardProps) {
+function UpgradeCard({ upgrade, level, wallet, onBuy }: CardProps) {
   const cost = upgradeCost(upgrade.id, level);
-  const affordable = cost !== null && gold >= cost;
+  const affordable = cost !== null && wallet >= cost;
 
   return (
     <View style={styles.card}>
@@ -67,8 +70,13 @@ function UpgradeCard({ upgrade, level, gold, onBuy }: CardProps) {
           <Text style={styles.buttonText}>Tamam!</Text>
         </View>
       ) : (
-        <Pressable style={[styles.button, !affordable && styles.disabled]} disabled={!affordable} onPress={onBuy}>
-          <Text style={styles.buttonText}>🪙 {formatNumber(cost)}</Text>
+        <Pressable
+          style={[styles.button, upgrade.currency === 'diamonds' && styles.diamondButton, !affordable && styles.disabled]}
+          disabled={!affordable}
+          onPress={onBuy}>
+          <Text style={styles.buttonText}>
+            {CURRENCY_ICON[upgrade.currency]} {formatNumber(cost)}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -180,6 +188,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFC93C',
     borderBottomWidth: 3,
     borderBottomColor: '#E0A21E',
+  },
+  diamondButton: {
+    backgroundColor: '#9AD4FF',
+    borderBottomColor: '#5AA9E6',
   },
   disabled: {
     opacity: 0.45,

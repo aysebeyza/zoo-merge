@@ -5,9 +5,10 @@
 // - Aralıksız oynayan: hiç ara vermeden oynar.
 // - Günde 3 kez oynayan: 08:00, 15:00 ve 20:00'de 20'şer dakika oynar; arada oyun kapalıdır.
 
-import { ANIMALS, foodPrice, MAX_LEVEL, upgradeCost, UPGRADES } from '../src/game/config.ts';
+import { ANIMALS, foodPrice, MAX_LEVEL, upgradeCost, upgradeFor, UPGRADES, type UpgradeId } from '../src/game/config.ts';
 import { formatNumber } from '../src/game/format.ts';
 import {
+  canAffordUpgrade,
   canBoost,
   canFeed,
   canMerge,
@@ -42,6 +43,9 @@ function rng(seed: number): () => number {
   };
 }
 
+/** Simülasyon boyunca alınan yükseltmeler: hangisi, kaçıncı seviye, ne zaman. */
+let purchases: { id: UpgradeId; level: number; at: number }[] = [];
+
 /** Oyuncunun bir anda yapabildiği her şeyi yapar; değişiklik kalmayınca durur. */
 function play(state: GameState, random: () => number): GameState {
   let s = state;
@@ -73,14 +77,17 @@ function play(state: GameState, random: () => number): GameState {
       }
     }
 
-    // 3. Alınabilen en ucuz yükseltmeyi al.
+    // 3. Alınabilen en ucuz yükseltmeyi al (elmaslılar arasında da en ucuzu).
     // SKIP_UPGRADES=autoEgg,betterEgg gibi: o yükseltmeler hiç alınmaz; etkilerini ölçmek için.
     const skipped = (process.env.SKIP_UPGRADES ?? '').split(',');
     const affordable = UPGRADES.filter((u) => !skipped.includes(u.id))
-      .map((u) => ({ id: u.id, cost: upgradeCost(u.id, s.upgrades[u.id]) }))
-      .filter((u): u is { id: typeof u.id; cost: number } => u.cost !== null && u.cost <= s.gold)
-      .sort((a, b) => a.cost - b.cost);
-    if (affordable.length > 0) changed = run({ type: 'buyUpgrade', id: affordable[0].id }) || changed;
+      .filter((u) => canAffordUpgrade(s, u.id))
+      .map((u) => ({ id: u.id, cost: upgradeCost(u.id, s.upgrades[u.id])!, diamonds: u.currency === 'diamonds' }))
+      .sort((a, b) => Number(a.diamonds) - Number(b.diamonds) || a.cost - b.cost);
+    if (affordable.length > 0 && run({ type: 'buyUpgrade', id: affordable[0].id })) {
+      changed = true;
+      purchases.push({ id: affordable[0].id, level: s.upgrades[affordable[0].id], at: s.now });
+    }
 
     // 4. Aynı seviyedeki yumurtaları birleştir (küçükten başlayarak, zincirleme birleşsin).
     const byLevel = new Map<number, number[]>();
@@ -141,8 +148,12 @@ function play(state: GameState, random: () => number): GameState {
 type Result = { level: number; wallMs: number; playMs: number }[];
 
 /** isPlaying: o anda oyun açık mı. Kapalıyken oyun yalnızca oyuncu geri dönünce ilerler. */
-function simulate(isPlaying: (t: number) => boolean, maxMs: number): { found: Result; state: GameState } {
+type Simulation = { found: Result; state: GameState; earnedByDay: number[]; bought: typeof purchases };
+
+function simulate(isPlaying: (t: number) => boolean, maxMs: number): Simulation {
   const random = rng(42);
+  purchases = [];
+  const earnedByDay: number[] = [];
   const start = 8 * HOUR; // 1. gün, sabah 08:00
   let s = createInitialState(start);
   let played = 0;
@@ -156,7 +167,10 @@ function simulate(isPlaying: (t: number) => boolean, maxMs: number): { found: Re
     }
     // Oyuncu geri döndü: kapalı geçen süre tek seferde işlenir (sepet, 2 saat sınırı, açlık, kaçma).
     wasPlaying = true;
+    const goldBefore = s.gold;
     s = gameReducer(s, { type: 'tick', now: t });
+    const day = Math.floor((t - start) / DAY);
+    earnedByDay[day] = (earnedByDay[day] ?? 0) + Math.max(0, s.gold - goldBefore);
     const before = s.discovered.length;
     s = play(s, random);
     played += SEC;
@@ -167,7 +181,7 @@ function simulate(isPlaying: (t: number) => boolean, maxMs: number): { found: Re
     }
     if (s.discovered.includes(MAX_LEVEL)) break;
   }
-  return { found, state: s };
+  return { found, state: s, earnedByDay, bought: purchases };
 }
 
 function wall(ms: number): string {
@@ -195,6 +209,17 @@ function report(title: string, found: Result, state: GameState, showWall: boolea
   console.log(`Sonda altın: ${formatNumber(state.gold)} · Parkta ${state.park.length} hayvan`);
 }
 
+/** Her gün ne kadar altın kazanıldığını ve hangi yükseltmelerin alındığını yazar. */
+function reportDays(sim: Simulation) {
+  console.log('Gün | Kazanılan altın | Alınan yükseltmeler');
+  sim.earnedByDay.forEach((earned, day) => {
+    const bought = sim.bought
+      .filter((p) => Math.floor((p.at - 8 * HOUR) / DAY) === day)
+      .map((p) => `${upgradeFor(p.id).name} ${p.level}`);
+    console.log(`${String(day + 1).padStart(3)} | ${formatNumber(earned).padStart(15)} | ${bought.join(', ') || '-'}`);
+  });
+}
+
 const continuous = simulate(() => true, 3 * DAY);
 report('Aralıksız oynayan', continuous.found, continuous.state, false);
 
@@ -202,3 +227,4 @@ report('Aralıksız oynayan', continuous.found, continuous.state, false);
 const sessions = [0, 7 * HOUR, 12 * HOUR];
 const daily = simulate((t) => sessions.some((s) => t % DAY >= s && t % DAY < s + 20 * MIN), 10 * DAY);
 report('Günde 3 kez 20 dakika oynayan', daily.found, daily.state, true);
+reportDays(daily);

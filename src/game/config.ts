@@ -59,15 +59,16 @@ export const DIAMONDS_PER_NEW_ANIMAL = 5;
 
 // --- Yumurta sepeti ---
 // Yumurtalar altınla alınmaz: Tavuk Anne belli aralıklarla sepete yumurta bırakır (oyun kapalıyken de),
-// sepet dolunca durur. Böylece ilerleme altına değil zamana bağlıdır; ejderha 2-3 günlük oyunda çıkar.
+// sepet dolunca durur. Böylece ilerleme altına değil zamana bağlıdır; günde 3 x 20 dk oynayan çocuk ejderhayı
+// yaklaşık 7. gün çıkarır.
 // Sayılar simülasyonla ayarlandı (npm run sim).
 
 /** Tavuk Anne yükseltmesinin seviyesine göre kaç saniyede bir sepete yumurta düşer. */
 export const BASKET_EVERY_SEC = [90, 75, 60, 45];
-/** Büyük sepet yükseltmesinin seviyesine göre sepet en fazla kaç yumurta alır. */
-export const BASKET_CAP = [40, 60, 90, 120];
+/** Büyük sepet yükseltmesinin seviyesine göre sepet en fazla kaç yumurta alır: 20'den başlar, 10'ar artar. */
+export const BASKET_CAP = [20, 30, 40, 50, 60];
 /** Yeni oyuna başlarken sepette kaç yumurta var; ilk hayvanlar hızlı çıksın diye sepet dolu başlar. */
-export const BASKET_START = 40;
+export const BASKET_START = 20;
 
 /**
  * Kaldırılan "Otomatik yumurta" yükseltmesinin seviye bedelleri; daha önce alanlara toplamı iade edilir.
@@ -79,7 +80,8 @@ export const AUTO_EGG_REFUND_COSTS = [150, 2_000, 20_000];
 export const RELEASE_VALUE_SEC = 60;
 
 // --- Yükseltmeler ---
-// Dokümanda etkiler var ama fiyatlar ve seviye sayıları yok. Aşağıdakiler öneri; testlerde ayarlanacak.
+// Dokümanda etkiler var ama fiyatlar ve seviye sayıları yok. Fiyatlar simülasyonla ayarlandı (npm run sim):
+// günde 3 x 20 dk oynayan çocuk ilk gün birkaç ucuz yükseltme alabilir, Büyük sepet'i ilk gün alamaz.
 
 export type UpgradeId =
   | 'fasterHen'
@@ -111,11 +113,17 @@ export function incubationFactor(fasterIncubatorLevel: number): number {
   return 1 - 0.1 * fasterIncubatorLevel;
 }
 
+/** Yükseltmenin hangi parayla alındığı. Elmas çok nadir olduğu için yalnızca en güçlü yükseltmeler elmasla alınır. */
+export type Currency = 'gold' | 'diamonds';
+
+export const CURRENCY_ICON: Record<Currency, string> = { gold: '🪙', diamonds: '💎' };
+
 export type UpgradeConfig = {
   id: UpgradeId;
   name: string;
   emoji: string;
-  /** Her seviyenin altın bedeli. Dizinin uzunluğu en yüksek seviyedir. */
+  currency: Currency;
+  /** Her seviyenin bedeli (currency cinsinden). Dizinin uzunluğu en yüksek seviyedir. */
   costs: readonly number[];
   /** Seviyenin etkisini kısaca anlatır; 0, henüz alınmamış demek. */
   effect: (level: number) => string;
@@ -126,42 +134,49 @@ export const UPGRADES: readonly UpgradeConfig[] = [
     id: 'fasterHen',
     name: 'Tavuk Anne',
     emoji: '🐔',
-    costs: [500, 5_000, 50_000],
+    currency: 'gold',
+    costs: [150_000, 1_500_000, 10_000_000],
     effect: (level) => `${BASKET_EVERY_SEC[level]} sn'de 1 yumurta`,
   },
   {
     id: 'biggerBasket',
     name: 'Büyük sepet',
     emoji: '🧺',
-    costs: [800, 8_000, 80_000],
+    currency: 'gold',
+    // İlk seviye ilk gün alınamasın diye pahalı (npm run sim ile ölçüldü).
+    costs: [4_000_000, 12_000_000, 35_000_000, 90_000_000],
     effect: (level) => `Sepete ${BASKET_CAP[level]} yumurta sığar`,
   },
   {
     id: 'moreVisitors',
     name: 'Daha çok ziyaretçi',
     emoji: '🎈',
-    costs: [300, 1_500, 7_500, 40_000, 200_000],
+    currency: 'gold',
+    costs: [50_000, 300_000, 1_500_000, 6_000_000, 25_000_000],
     effect: (level) => (level === 0 ? 'Normal kazanç' : `+%${level * 10} altın`),
   },
   {
     id: 'fasterIncubator',
     name: 'Kuluçka makinesi',
     emoji: '🔥',
-    costs: [400, 2_500, 12_000, 60_000, 300_000],
+    currency: 'gold',
+    costs: [80_000, 400_000, 2_000_000, 8_000_000, 30_000_000],
     effect: (level) => (level === 0 ? 'Normal hız' : `Kuluçka %${level * 10} daha kısa`),
   },
   {
     id: 'incubatorSlot',
     name: 'Yeni kuluçka yuvası',
     emoji: '🐣',
-    costs: [500, 30_000],
+    currency: 'diamonds',
+    costs: [20, 40],
     effect: (level) => `${incubatorSlots(level)} yuva`,
   },
   {
     id: 'betterEgg',
     name: 'Daha iyi yumurta',
     emoji: '✨',
-    costs: [800, 8_000, 80_000],
+    currency: 'diamonds',
+    costs: [15, 30, 45],
     effect: (level) =>
       level === 0
         ? 'Yumurtalar 1. seviye'
@@ -173,7 +188,8 @@ export const UPGRADES: readonly UpgradeConfig[] = [
     id: 'biggerPark',
     name: 'Daha büyük park',
     emoji: '🏞️',
-    costs: [1_000, 5_000, 25_000, 100_000],
+    currency: 'gold',
+    costs: [200_000, 1_000_000, 4_000_000, 15_000_000],
     effect: (level) => `${parkLimit(level)} hayvan`,
   },
 ];

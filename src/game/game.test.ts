@@ -20,6 +20,7 @@ import {
 import { formatDuration, formatNumber, formatWait } from './format.ts';
 import { parseSave, SAVE_VERSION, serializeSave } from './save.ts';
 import {
+  basketCap,
   createInitialState,
   foodStock,
   fullnessAt,
@@ -251,7 +252,10 @@ function withUpgrades(state: GameState, levels: Partial<Record<UpgradeId, number
   let next = state;
   for (const [id, level] of Object.entries(levels) as [UpgradeId, number][]) {
     for (let i = 0; i < level; i++) {
-      next = gameReducer({ ...next, gold: next.gold + upgradeFor(id).costs[i] }, { type: 'buyUpgrade', id });
+      const { currency, costs } = upgradeFor(id);
+      const funded =
+        currency === 'diamonds' ? { ...next, diamonds: next.diamonds + costs[i] } : { ...next, gold: next.gold + costs[i] };
+      next = gameReducer(funded, { type: 'buyUpgrade', id });
     }
   }
   return next;
@@ -272,6 +276,24 @@ describe('yükseltmeler', () => {
     const maxed = withUpgrades(createInitialState(T0), { fasterHen: upgradeFor('fasterHen').costs.length });
     const rich = { ...maxed, gold: 1e12 };
     assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'fasterHen' }), rich);
+  });
+
+  it('elmaslı yükseltme elmasla alınır, altın yetmez', () => {
+    const cost = upgradeFor('incubatorSlot').costs[0];
+    const goldOnly = { ...createInitialState(T0), gold: 1e12, diamonds: cost - 1 };
+    assert.equal(gameReducer(goldOnly, { type: 'buyUpgrade', id: 'incubatorSlot' }), goldOnly);
+    const next = gameReducer({ ...goldOnly, diamonds: cost + 3 }, { type: 'buyUpgrade', id: 'incubatorSlot' });
+    assert.equal(next.upgrades.incubatorSlot, 1);
+    assert.equal(next.diamonds, 3);
+    assert.equal(next.gold, 1e12);
+  });
+
+  it('sepet 20 yumurtayla başlar, büyük sepet her seviyede 10 artırır', () => {
+    const state = createInitialState(T0);
+    assert.equal(state.basket, 20);
+    assert.equal(basketCap(state), 20);
+    assert.equal(basketCap(withUpgrades(state, { biggerBasket: 1 })), 30);
+    assert.equal(basketCap(withUpgrades(state, { biggerBasket: 4 })), 60);
   });
 
   it('daha iyi yumurta, şans tutunca sepetten 2. seviye yumurta çıkar', () => {

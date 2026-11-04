@@ -45,8 +45,8 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - "Yeni hayvan!" kutlaması ve elmas ödülü
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
-- Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 90 sn'de bir sepete yumurta bırakır (oyun kapalıyken de), sepet 40 yumurta alır ve dolu başlar. Sayılar simülasyonla ayarlandı: günde 3 × 20 dk oynayan çocuk ejderhayı 3. gün çıkarır (`npm run sim`).
-- 7 yükseltme: Tavuk Anne, büyük sepet, daha çok ziyaretçi, kuluçka makinesi, yeni kuluçka yuvası, daha iyi yumurta, daha büyük park
+- Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 90 sn'de bir sepete yumurta bırakır (oyun kapalıyken de), sepet 20 yumurta alır ve dolu başlar; Büyük sepet her seviyede 10 artırır (en fazla 60). Sayılar simülasyonla ayarlandı: günde 3 × 20 dk oynayan çocuk Büyük sepet'i ilk gün alamaz, ejderhayı yaklaşık 7. gün çıkarır (`npm run sim`, her günün kazancını ve alınan yükseltmeleri de yazar).
+- 7 yükseltme: Tavuk Anne, büyük sepet, daha çok ziyaretçi, kuluçka makinesi ve daha büyük park altınla; yeni kuluçka yuvası ve daha iyi yumurta elmasla (💎) alınır
 - Besleme: tokluk zamanla azalır, aç hayvan daha az kazanır. Her hayvanın kendi yemi var (civciv tohum, tavşan havuç ...); yemler yem dükkanından alınıp stokta durur, bir yem hayvanı tamamen doyurur. Uzun süre aç kalan hayvan kendi yumurtasına döner; alan doluysa yumurta hediye kutusunda (🎁) bekler.
 - Hayvanlarım ekranı (parktaki 🐾 düğmesi): bütün hayvanlar tek tek, en aç olan en üstte; her hayvanın ne zaman acıkacağı yazar ("⏰ 1 sa sonra acıkır", "🍖 Şimdi besle!"); besle, yetenek geliştir, doğaya sal. İkinci sekmede yem dükkanı: her yemin parkta kaç hayvan için gerektiği ve stoğu, "Eksikleri al" ile her hayvana birer yem.
 - Yetenekler: her hayvanın 3 seviyeli yeteneği (Sevimlilik, Gösteri, Görkem, Kral). Seviyeler parkta kalma süresiyle açılır, hayvanın kendi kazancına göre altınla geliştirilir; üzgün hayvanda çalışmaz, kaçan hayvanın yumurtası seviyeyi korur.

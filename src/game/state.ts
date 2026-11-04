@@ -32,6 +32,7 @@ import {
   skillMultiplier,
   START_GOLD,
   upgradeCost,
+  upgradeFor,
   UPGRADES,
   type UpgradeId,
 } from './config.ts';
@@ -144,6 +145,13 @@ export function createInitialState(now: number): GameState {
     escapedQueue: [],
     food: {},
   };
+}
+
+/** Yükseltmenin bir sonraki seviyesine yetecek altın ya da elmas var mı. */
+export function canAffordUpgrade(state: Pick<GameState, 'gold' | 'diamonds' | 'upgrades'>, id: UpgradeId): boolean {
+  const cost = upgradeCost(id, state.upgrades[id]);
+  if (cost === null) return false;
+  return (upgradeFor(id).currency === 'diamonds' ? state.diamonds : state.gold) >= cost;
 }
 
 export function basketCap(state: GameState): number {
@@ -300,7 +308,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'buyUpgrade': {
       const level = state.upgrades[action.id];
       const cost = upgradeCost(action.id, level);
-      if (cost === null || state.gold < cost) return state;
+      if (cost === null || !canAffordUpgrade(state, action.id)) return state;
       const upgrades = { ...state.upgrades, [action.id]: level + 1 };
       let { incubator, basketFilledAt } = state;
       if (action.id === 'incubatorSlot') incubator = [...incubator, null];
@@ -317,7 +325,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           return { ...slot, durationMs: Math.round(elapsed + remaining * ratio) };
         });
       }
-      return { ...state, gold: state.gold - cost, upgrades, incubator, basketFilledAt };
+      const paid =
+        upgradeFor(action.id).currency === 'diamonds'
+          ? { diamonds: state.diamonds - cost }
+          : { gold: state.gold - cost };
+      return { ...state, ...paid, upgrades, incubator, basketFilledAt };
     }
 
     case 'moveEgg': {
