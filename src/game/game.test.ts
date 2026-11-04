@@ -105,7 +105,7 @@ describe('yumurta sepeti', () => {
 
   it('Tavuk Anne aralıklarla sepete yumurta bırakır, oyun kapalıyken de', () => {
     const state = { ...createInitialState(T0), basket: 0 };
-    const every = BASKET_EVERY_SEC[0] * 1000;
+    const every = BASKET_EVERY_SEC * 1000;
     assert.equal(gameReducer(state, { type: 'tick', now: T0 + every - 1 }).basket, 0);
     assert.equal(gameReducer(state, { type: 'tick', now: T0 + every }).basket, 1);
     assert.equal(gameReducer(state, { type: 'tick', now: T0 + 5 * every + 10 }).basket, 5);
@@ -113,7 +113,7 @@ describe('yumurta sepeti', () => {
 
   it('sepet dolunca durur; yer açılınca sayaç baştan başlar', () => {
     const state = { ...createInitialState(T0), basket: 0 };
-    const every = BASKET_EVERY_SEC[0] * 1000;
+    const every = BASKET_EVERY_SEC * 1000;
     // Bir gece boyunca kapalı kaldı: sepet taşmaz.
     const morning = gameReducer(state, { type: 'tick', now: T0 + 12 * HOUR });
     assert.equal(morning.basket, BASKET_CAP[0]);
@@ -122,9 +122,9 @@ describe('yumurta sepeti', () => {
     assert.equal(nextBasketEggAt(taken), morning.now + every);
   });
 
-  it('Tavuk Anne ve Büyük sepet yükseltmeleri sepeti hızlandırır ve büyütür', () => {
-    const state = withUpgrades({ ...createInitialState(T0), basket: 0 }, { fasterHen: 3, biggerBasket: 3 });
-    const every = BASKET_EVERY_SEC[3] * 1000;
+  it('Büyük sepet yükseltmesi sepeti büyütür, yumurta hızı değişmez', () => {
+    const state = withUpgrades({ ...createInitialState(T0), basket: 0 }, { biggerBasket: 3 });
+    const every = BASKET_EVERY_SEC * 1000;
     assert.equal(gameReducer(state, { type: 'tick', now: T0 + 10 * every }).basket, 10);
     assert.equal(gameReducer(state, { type: 'tick', now: T0 + 24 * HOUR }).basket, BASKET_CAP[3]);
   });
@@ -132,11 +132,23 @@ describe('yumurta sepeti', () => {
 
 describe('birleştirme', () => {
   it('aynı seviyedeki iki yumurta bir üst seviyeye çıkar, parlaklık korunur', () => {
-    const state = withGrid(createInitialState(T0), { 0: egg(1, 1, true), 1: egg(2, 1) });
+    const state = withGrid({ ...createInitialState(T0), discovered: [1] }, { 0: egg(1, 1, true), 1: egg(2, 1) });
     const next = gameReducer(state, { type: 'moveEgg', from: 0, to: 1 });
     assert.equal(next.grid[0], null);
     assert.equal(next.grid[1]?.level, 2);
     assert.equal(next.grid[1]?.variant.shiny, true);
+  });
+
+  it('bulunmamış hayvanın yumurtası birleştirmeyle yapılamaz; yumurta yerinde kalır', () => {
+    // Kedi bulundu, köpek bulunmadı: iki köpek yumurtası panda yumurtası olamaz.
+    const state = withGrid({ ...createInitialState(T0), discovered: [1, 2, 3] }, { 0: egg(1, 4), 1: egg(2, 4) });
+    assert.equal(gameReducer(state, { type: 'moveEgg', from: 0, to: 1 }), state);
+    // İki kedi yumurtası köpek yumurtası olabilir: köpek bir sonraki hayvan.
+    const cats = withGrid(state, { 0: egg(1, 3), 1: egg(2, 3) });
+    assert.equal(gameReducer(cats, { type: 'moveEgg', from: 0, to: 1 }).grid[1]?.level, 4);
+    // Köpek bulununca kilit açılır.
+    const found = { ...state, discovered: [1, 2, 3, 4] };
+    assert.equal(gameReducer(found, { type: 'moveEgg', from: 0, to: 1 }).grid[1]?.level, 5);
   });
 
   it('farklı seviyeler yer değiştirir', () => {
@@ -283,10 +295,10 @@ describe('yükseltmeler', () => {
 
   it('altın yetmezse ya da en üst seviyedeyse alınamaz', () => {
     const poor = { ...createInitialState(T0), gold: 0 };
-    assert.equal(gameReducer(poor, { type: 'buyUpgrade', id: 'fasterHen' }), poor);
-    const maxed = withUpgrades(createInitialState(T0), { fasterHen: upgradeFor('fasterHen').costs.length });
+    assert.equal(gameReducer(poor, { type: 'buyUpgrade', id: 'moreVisitors' }), poor);
+    const maxed = withUpgrades(createInitialState(T0), { moreVisitors: upgradeFor('moreVisitors').costs.length });
     const rich = { ...maxed, gold: 1e12 };
-    assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'fasterHen' }), rich);
+    assert.equal(gameReducer(rich, { type: 'buyUpgrade', id: 'moreVisitors' }), rich);
   });
 
   it('elmaslı yükseltme elmasla alınır, altın yetmez', () => {
@@ -600,11 +612,19 @@ describe('kayıt', () => {
   });
 
   it('yükseltmeler kaydedilir; eski kayıtta olmayan yükseltmeler 0 olur', () => {
-    const state = withUpgrades(createInitialState(T0), { incubatorSlot: 1, fasterHen: 2 });
+    const state = withUpgrades(createInitialState(T0), { incubatorSlot: 1, moreVisitors: 2 });
     assert.deepEqual(parseSave(serializeSave(state)), state);
     const { upgrades: _, ...old } = createInitialState(T0);
     const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }));
     assert.equal(loaded?.upgrades.betterEgg, 0);
+  });
+
+  it('kaldırılan Tavuk Anne yükseltmesine harcanan altın iade edilir', () => {
+    const state = createInitialState(T0);
+    const old = { ...state, upgrades: { ...state.upgrades, fasterHen: 2 } };
+    const loaded = parseSave(JSON.stringify({ version: SAVE_VERSION, state: old }));
+    assert.equal(loaded?.gold, state.gold + 500 + 5_000);
+    assert.equal('fasterHen' in (loaded?.upgrades ?? {}), false);
   });
 
   it('altınla yumurta dönemindeki kayıt: otomatik yumurta bedeli iade edilir, sepet dolu başlar', () => {

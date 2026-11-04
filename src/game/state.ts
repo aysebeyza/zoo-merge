@@ -171,7 +171,7 @@ export function basketCap(state: GameState): number {
 }
 
 export function basketEveryMs(state: GameState): number {
-  return BASKET_EVERY_SEC[state.upgrades.fasterHen] * 1000;
+  return BASKET_EVERY_SEC * 1000;
 }
 
 /** Sepete bir sonraki yumurtanın düşeceği an; sepet doluysa null (Tavuk Anne dinleniyor). */
@@ -290,8 +290,17 @@ export function canBoost(slot: IncubatorSlot, now: number): boolean {
   return !slot.boosted && now < slot.startedAt + slot.durationMs;
 }
 
-export function canMerge(a: Egg, b: Egg): boolean {
-  return a.level === b.level && a.level < MAX_LEVEL;
+/**
+ * İki yumurta birleşebilir mi. Hayvanlar sırayla bulunur: birleşince çıkacak yumurta en fazla bir sonraki
+ * bulunmamış hayvanın yumurtası olabilir (köpek çıkmadan panda yumurtası yapılamaz).
+ */
+export function canMerge(a: Egg, b: Egg, discovered: readonly number[]): boolean {
+  return a.level === b.level && a.level < MAX_LEVEL && !mergeLocked(a, discovered);
+}
+
+/** Aynı seviyedeki iki yumurta yalnızca bir sonraki hayvan bulunmadığı için mi birleşemiyor. */
+export function mergeLocked(egg: Egg, discovered: readonly number[]): boolean {
+  return egg.level > Math.max(0, ...discovered);
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -356,7 +365,7 @@ function applyAction(state: GameState, action: GameAction): GameState {
       if (!moving || from === to) return state;
       const target = state.grid[to];
       const grid = [...state.grid];
-      if (target && canMerge(moving, target)) {
+      if (target && canMerge(moving, target, state.discovered)) {
         grid[to] = {
           id: state.nextId,
           level: moving.level + 1,
@@ -365,6 +374,8 @@ function applyAction(state: GameState, action: GameAction): GameState {
         grid[from] = null;
         return { ...state, grid, nextId: state.nextId + 1 };
       }
+      // Kilitli birleştirmede yer değiştirmek anlamsız: yumurta yerine döner (arayüz uyarı gösterir).
+      if (target && target.level === moving.level && mergeLocked(moving, state.discovered)) return state;
       // Boş kutuya taşı ya da yer değiştir.
       grid[to] = moving;
       grid[from] = target;

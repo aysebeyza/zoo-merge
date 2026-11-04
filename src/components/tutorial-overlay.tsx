@@ -102,7 +102,12 @@ export function TutorialOverlay({ hint, rects }: Props) {
     });
 
   let content = null;
-  if (origin && size && fromRect && toRect) {
+  if (origin && size && !(fromRect && toRect)) {
+    // Hedef daha ölçülmedi: el eski yerde görünmesin, ekran koyu ve dokunulamaz kalsın.
+    content = (
+      <View collapsable={false} onStartShouldSetResponder={() => true} style={[StyleSheet.absoluteFill, styles.dimFull]} />
+    );
+  } else if (origin && size && fromRect && toRect) {
     // Ölçümler pencereye göre; bu katmanın kendi yerine göre çevrilir.
     const from = {
       x: center(fromRect).x - origin.x,
@@ -207,6 +212,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
+  },
+  dimFull: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   blocker: {
     position: 'absolute',

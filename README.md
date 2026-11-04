@@ -38,7 +38,7 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 
 ## Şu an oyunda olanlar
 
-- 4x3 birleştirme alanı, sürükle-bırak ile birleştirme
+- 4x3 birleştirme alanı, sürükle-bırak ile birleştirme. Hayvanlar sırayla bulunur: birleştirmeyle en fazla bir sonraki bulunmamış hayvanın yumurtası yapılabilir (köpek çıkmadan panda yumurtası olmaz, "🐶 Önce bir köpek çıkar!" yazar).
 - Her hayvanın yumurtası hep aynı renk (civciv sarı, kedi turuncu ...); nadir parlak (✨) yumurta %50 fazla kazandırır, birleşince parlaklık korunur
 - 2 yuvalı kuluçka makinesi
 - Parkta gezen ve altın düşüren hayvanlar, doğaya salma
@@ -49,7 +49,7 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - Altın kazancı dokümandaki tablonun yaklaşık 10'da 1'i (oyuncular bir günde 20 milyona ulaşıyordu).
 - İlk oyun rehberi: 👆 el çocuğa civciv, tavşan ve kediyi tek tek çıkartır, sonra Hayvanlarım'ı açtırıp üçünü hediye yemle (🌾🥕🐟) besletir ve "Aferin!" der; besleme öğretilsin diye bu üç hayvan rehberin sonunda biraz acıkır. Rehber sırasında bu üç hayvanın kuluçkası 3 saniye. Rehberde ekranın geri kalanı koyulaşır ve yalnızca elin gösterdiği hamle işe yarar (yanlış yere sürüklenen yumurta geri döner).
 - Oyunu baştan başlatma: Yükselt panelinin en altında, ebeveyn kapısının (çarpma sorusu) arkasında.
-- 7 yükseltme: Tavuk Anne, büyük sepet, daha çok ziyaretçi, kuluçka makinesi ve daha büyük park altınla; büyük sepet, yeni kuluçka yuvası ve daha iyi yumurta elmasla (💎) alınır
+- 6 yükseltme: daha çok ziyaretçi, kuluçka makinesi ve daha büyük park altınla; büyük sepet, yeni kuluçka yuvası ve daha iyi yumurta elmasla (💎) alınır
 - Besleme: tokluk zamanla azalır, aç hayvan daha az kazanır. Her hayvanın kendi yemi var (civciv tohum, tavşan havuç ...); yemler yem dükkanından alınıp stokta durur, bir yem hayvanı tamamen doyurur. Uzun süre aç kalan hayvan kendi yumurtasına döner; alan doluysa yumurta hediye kutusunda (🎁) bekler.
 - Hayvanlarım ekranı (parktaki 🐾 düğmesi): bütün hayvanlar tek tek, en aç olan en üstte; her hayvanın ne zaman acıkacağı yazar ("⏰ 1 sa sonra acıkır", "🍖 Şimdi besle!"); besle, yetenek geliştir, doğaya sal. İkinci sekmede yem dükkanı: her yemin parkta kaç hayvan için gerektiği ve stoğu, "Eksikleri al" ile her hayvana birer yem.
 - Yetenekler: her hayvanın 3 seviyeli yeteneği (Sevimlilik, Gösteri, Görkem, Kral). Seviyeler parkta kalma süresiyle açılır, hayvanın kendi kazancına göre altınla geliştirilir; üzgün hayvanda çalışmaz, kaçan hayvanın yumurtası seviyeyi korur.
@@ -60,6 +60,7 @@ Henüz olmayanlar: koleksiyon defteri, reklamlar.
 
 Kararlar:
 - Parkta birleştirme yapılmayacak: park dolunca yer açmanın yolu hayvanı doğaya salmak.
+- Sepeti hızlandıran Tavuk Anne yükseltmesi kaldırıldı; sepet hep 5 dakikada bir yumurta alır, yalnızca elmasla büyütülür. Ona harcanan altın eski kayıtlara iade edilir.
 - Altınla sınırsız yumurta alma ve otomatik yumurta kaldırıldı; yerine yumurta sepeti geldi (oyun 3 saatte bitiyordu). Otomatik yumurtaya harcanan altın eski kayıtlara iade edilir.
 - Otomatik yemlik ve toplu besleyen mama kabı kaldırıldı: hayvanlar tek tek, kendi yemleriyle beslenir. Yemliği almış eski kayıtlara 250 altın iade edilir.
 - Renk karışımı (saf / desenli haller) kaldırıldı: yumurta rengi hayvanı gösterir, çeşit olarak yalnızca parlak yumurta var. Eski kayıtlardaki desenliler parlak olur.

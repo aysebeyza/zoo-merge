@@ -70,8 +70,8 @@ export const DIAMONDS_PER_NEW_ANIMAL = 5;
 // yaklaşık 7. gün çıkarır.
 // Sayılar simülasyonla ayarlandı (npm run sim).
 
-/** Tavuk Anne yükseltmesinin seviyesine göre kaç saniyede bir sepete yumurta düşer. */
-export const BASKET_EVERY_SEC = [300, 240, 180, 120];
+/** Tavuk Anne kaç saniyede bir sepete yumurta bırakır. Hızlandıran yükseltme yok; sepet yalnızca büyütülür. */
+export const BASKET_EVERY_SEC = 300;
 /** Büyük sepet yükseltmesinin seviyesine göre sepet en fazla kaç yumurta alır: 20'den başlar, 10'ar artar. */
 export const BASKET_CAP = [20, 30, 40, 50, 60];
 /** Yeni oyuna başlarken sepette kaç yumurta var; ilk hayvanlar hızlı çıksın diye sepet dolu başlar. */
@@ -83,6 +83,12 @@ export const BASKET_START = 20;
  */
 export const AUTO_EGG_REFUND_COSTS = [150, 2_000, 20_000];
 
+/**
+ * Kaldırılan "Tavuk Anne" (sepeti hızlandıran) yükseltmesinin seviye bedelleri; eski kayıtlarda alınmışsa
+ * toplamı iade edilir. Telefondaki sürümde geçerli olan ilk fiyatlar.
+ */
+export const FASTER_HEN_REFUND_COSTS = [500, 5_000, 50_000];
+
 /** Doğaya salınan hayvan, yaklaşık 1 dakikalık kazancını verir. */
 export const RELEASE_VALUE_SEC = 60;
 
@@ -91,7 +97,6 @@ export const RELEASE_VALUE_SEC = 60;
 // günde 3 x 20 dk oynayan çocuk ilk gün birkaç ucuz yükseltme alabilir, Büyük sepet'i ilk gün alamaz.
 
 export type UpgradeId =
-  | 'fasterHen'
   | 'biggerBasket'
   | 'moreVisitors'
   | 'fasterIncubator'
@@ -137,14 +142,6 @@ export type UpgradeConfig = {
 };
 
 export const UPGRADES: readonly UpgradeConfig[] = [
-  {
-    id: 'fasterHen',
-    name: 'Tavuk Anne',
-    emoji: '🐔',
-    currency: 'gold',
-    costs: [150_000, 1_500_000, 10_000_000],
-    effect: (level) => `${BASKET_EVERY_SEC[level]} sn'de 1 yumurta`,
-  },
   {
     id: 'biggerBasket',
     name: 'Büyük sepet',

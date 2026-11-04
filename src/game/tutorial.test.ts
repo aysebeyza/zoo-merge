@@ -51,7 +51,7 @@ describe('ilk oyun rehberi', () => {
     // Birleştirmek, sepete tekrar dokunmak ya da yükseltme almak hiçbir şey yapmaz.
     assert.equal(gameReducer(state, { type: 'moveEgg', from: 0, to: 1 }), state);
     assert.equal(gameReducer(state, { type: 'takeEgg' }), state);
-    assert.equal(gameReducer({ ...state, gold: 1e9 }, { type: 'buyUpgrade', id: 'fasterHen' }).upgrades.fasterHen, 0);
+    assert.equal(gameReducer({ ...state, gold: 1e9 }, { type: 'buyUpgrade', id: 'moreVisitors' }).upgrades.moreVisitors, 0);
 
     // Gösterilen hamle çalışır; yumurta çatlarken başka hamle yapılamaz, zaman ilerler.
     const hatching = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
@@ -63,7 +63,7 @@ describe('ilk oyun rehberi', () => {
 
   it('birleştirme adımında iki yumurta hangi yönde sürüklenirse sürüklensin birleşir', () => {
     // İkinci adım (tavşan): elde iki civciv yumurtası.
-    let state: GameState = { ...createInitialState(T0), tutorialStep: 2 };
+    let state: GameState = { ...createInitialState(T0), tutorialStep: 2, discovered: [1] };
     state = gameReducer(state, { type: 'takeEgg' });
     state = gameReducer(state, { type: 'takeEgg' });
     const hint = tutorialHint(state);
@@ -83,7 +83,7 @@ describe('ilk oyun rehberi', () => {
   });
 
   it('rehber bitince her hamle serbest', () => {
-    const state: GameState = { ...createInitialState(T0), tutorialStep: null };
+    const state: GameState = { ...createInitialState(T0), tutorialStep: null, discovered: [1] };
     const merged = gameReducer(gameReducer(gameReducer(state, { type: 'takeEgg' }), { type: 'takeEgg' }), {
       type: 'moveEgg',
       from: 0,

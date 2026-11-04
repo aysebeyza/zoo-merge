@@ -15,12 +15,13 @@ import { Park } from '@/components/park';
 import { ParentGate } from '@/components/parent-gate';
 import { TutorialOverlay } from '@/components/tutorial-overlay';
 import { UpgradesPanel } from '@/components/upgrades-panel';
-import { GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES } from '@/game/config';
+import { animalFor, GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import {
   basketCap,
   canAffordUpgrade,
   canMerge,
+  mergeLocked,
   createInitialState,
   gameReducer,
   nextBasketEggAt,
@@ -35,6 +36,8 @@ import { findDropZone, type Rect } from '@/lib/drop-zone';
 const TICK_MS = 250;
 const MAX_BOARD_WIDTH = 480;
 const GRID_GAP = 8;
+/** Rehber hedefi henüz ölçülmediyse: el görünmez, ekran tamamen koyu kalır. */
+const NO_RECTS = new Map<string, Rect>();
 
 function haptic(kind: 'merge' | 'success') {
   if (Platform.OS === 'web') return;
@@ -92,15 +95,20 @@ export default function GameScreen() {
   // İlk oyun rehberi: elin göstereceği yerler bırakma alanları ile sepet ve Hayvanlarım düğmeleri.
   // Rehber açıkken yerler yarım saniyede bir ölçülür (ekran düzeni değişebilir).
   const hint = tutorialHint(state, animalsTab !== null);
-  const hintActive = hint !== null;
+  // Elin gösterdiği yer değişince (ör. besleme sonrası liste yeniden sıralanınca) hemen yeniden ölçülür;
+  // eski ölçüm yeni hedef için kullanılmaz, yoksa el önce eski yere gider.
+  const hintKey = hint === null ? null : hint.kind === 'drag' ? `${hint.from}>${hint.to}` : hint.target;
   const targetViews = useRef(new Map<string, HostInstance>());
   const targetRef = (id: string) => (view: HostInstance | null) => {
     if (view) targetViews.current.set(id, view);
     else targetViews.current.delete(id);
   };
-  const [hintRects, setHintRects] = useState(() => new Map<string, Rect>());
+  const [hintRects, setHintRects] = useState<{ key: string | null; rects: Map<string, Rect> }>(() => ({
+    key: null,
+    rects: new Map(),
+  }));
   useEffect(() => {
-    if (!hintActive) return;
+    if (hintKey === null) return;
     const measureAll = () => {
       const views = [...zoneViews.current, ...targetViews.current];
       const next = new Map<string, Rect>();
@@ -108,16 +116,25 @@ export default function GameScreen() {
       views.forEach(([id, view]) =>
         view.measureInWindow((x, y, w, h) => {
           next.set(id, { x, y, width: w, height: h });
-          if (--pending === 0) setHintRects(next);
+          if (--pending === 0) setHintRects({ key: hintKey, rects: next });
         }),
       );
     };
     measureAll();
     const timer = setInterval(measureAll, 500);
     return () => clearInterval(timer);
-  }, [hintActive]);
+  }, [hintKey]);
 
   // Parmağın ucu değil, sürüklenen yumurtanın ortası sayılır: ekranda nereye bırakıldığı görünüyorsa oraya düşer.
+  // Kısa uyarı yazısı (ör. "Önce bir köpek çıkar!"); birkaç saniye sonra kaybolur.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = (text: string) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice(text);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2500);
+  };
+
   const handleDrop = (from: number, dx: number, dy: number) => {
     const start = zoneRects.current.get(`cell-${from}`);
     if (!start) return;
@@ -128,7 +145,12 @@ export default function GameScreen() {
     if (kind === 'cell') {
       const moving = state.grid[from];
       const other = state.grid[target];
-      if (moving && other && from !== target && canMerge(moving, other)) haptic('merge');
+      if (moving && other && from !== target && canMerge(moving, other, state.discovered)) haptic('merge');
+      if (moving && other && from !== target && moving.level === other.level && mergeLocked(moving, state.discovered)) {
+        // Bir sonraki hayvan bulunmadan daha üst yumurta yapılamaz; çocuğa ne yapması gerektiği söylenir.
+        const next = animalFor(moving.level);
+        showNotice(`${next.emoji} Önce bir ${next.name.toLocaleLowerCase('tr')} çıkar!`);
+      }
       dispatch({ type: 'moveEgg', from, to: target });
     } else if (kind === 'slot') {
       dispatch({ type: 'incubate', from, slot: target });
@@ -245,6 +267,12 @@ export default function GameScreen() {
         </Pressable>
       </View>
 
+      {notice && (
+        <View style={styles.notice} pointerEvents="none">
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
+      )}
+
       {/* Kaçan hayvanların yumurtaları alan doluyken burada bekler; dokununca alana gelir. */}
       {state.giftBox.length > 0 && (
         <Pressable
@@ -258,7 +286,7 @@ export default function GameScreen() {
       )}
 
       {/* Sürüklerken el kaybolur; çocuk yaptığı işe baksın. */}
-      {hint && draggingFrom === null && <TutorialOverlay hint={hint} rects={hintRects} />}
+      {hint && draggingFrom === null && <TutorialOverlay hint={hint} rects={hintRects.key === hintKey ? hintRects.rects : NO_RECTS} />}
 
       {upgradesOpen && (
         <UpgradesPanel
@@ -427,6 +455,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: 'white',
+  },
+  notice: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '45%',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#5B3A1E',
+    zIndex: 70,
+    elevation: 70,
+  },
+  noticeText: {
+    color: 'white',
+    fontSize: 17,
+    fontWeight: '900',
   },
   giftButton: {
     alignSelf: 'center',

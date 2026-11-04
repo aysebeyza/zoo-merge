@@ -1,6 +1,6 @@
 // Oyun durumunu yazıya (JSON) çevirir ve geri okur. Depolamanın kendisi arayüz tarafında yapılır.
 
-import { AUTO_EGG_REFUND_COSTS, AUTO_FEEDER_REFUND, GRID_SIZE, incubatorSlots, UPGRADES } from './config.ts';
+import { AUTO_EGG_REFUND_COSTS, AUTO_FEEDER_REFUND, FASTER_HEN_REFUND_COSTS, GRID_SIZE, incubatorSlots, UPGRADES } from './config.ts';
 import { createInitialState, type Egg, type GameState } from './state.ts';
 import type { Variant } from './variant.ts';
 
@@ -40,14 +40,15 @@ export function parseSave(json: string | null): GameState | null {
   } = saved as GameState & { nextEggColor?: unknown; eggsBought?: unknown; nextAutoEggAt?: unknown };
   // Sonradan eklenen alanlar eski kayıtta yoksa başlangıç değerleri kullanılır.
   const fresh = createInitialState(saved.now);
-  // Yalnızca bugün olan yükseltmeler okunur. Kaldırılan otomatik yemliği ve otomatik yumurtayı
-  // alanlara harcadıkları altın iade edilir.
+  // Yalnızca bugün olan yükseltmeler okunur. Kaldırılan otomatik yemliği, otomatik yumurtayı ve
+  // Tavuk Anne'yi alanlara harcadıkları altın iade edilir.
   const savedUpgrades = (saved.upgrades ?? {}) as Record<string, number>;
   const upgrades = { ...fresh.upgrades };
   for (const { id } of UPGRADES) upgrades[id] = savedUpgrades[id] ?? 0;
   const refund =
     ((savedUpgrades.autoFeeder ?? 0) > 0 ? AUTO_FEEDER_REFUND : 0) +
-    AUTO_EGG_REFUND_COSTS.slice(0, savedUpgrades.autoEgg ?? 0).reduce((sum, c) => sum + c, 0);
+    AUTO_EGG_REFUND_COSTS.slice(0, savedUpgrades.autoEgg ?? 0).reduce((sum, c) => sum + c, 0) +
+    FASTER_HEN_REFUND_COSTS.slice(0, savedUpgrades.fasterHen ?? 0).reduce((sum, c) => sum + c, 0);
   return {
     ...fresh,
     ...rest,

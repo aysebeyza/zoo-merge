@@ -93,7 +93,7 @@ function play(state: GameState, random: () => number): GameState {
     const byLevel = new Map<number, number[]>();
     s.grid.forEach((egg, i) => egg && byLevel.set(egg.level, [...(byLevel.get(egg.level) ?? []), i]));
     for (const [, cells] of [...byLevel].sort((a, b) => a[0] - b[0])) {
-      if (cells.length >= 2 && canMerge(s.grid[cells[0]]!, s.grid[cells[1]]!)) {
+      if (cells.length >= 2 && canMerge(s.grid[cells[0]]!, s.grid[cells[1]]!, s.discovered)) {
         changed = run({ type: 'moveEgg', from: cells[0], to: cells[1] }) || changed;
         break;
       }
