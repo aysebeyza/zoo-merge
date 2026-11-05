@@ -6,15 +6,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimalsPanel, type AnimalsTab } from '@/components/animals-panel';
 import { AwayGoldModal } from '@/components/away-gold-modal';
 import { DraggableEgg } from '@/components/draggable-egg';
+import { EnclosureView } from '@/components/enclosure-view';
 import { EscapedModal } from '@/components/escaped-modal';
 import { FruitMergeGame } from '@/components/fruit-merge-game';
 import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
 import { NewAnimalModal } from '@/components/new-animal-modal';
-import { Park } from '@/components/park';
 import { ParentGate } from '@/components/parent-gate';
 import { TutorialOverlay } from '@/components/tutorial-overlay';
 import { UpgradesPanel } from '@/components/upgrades-panel';
+import { Zoo } from '@/components/zoo';
 import { animalFor, GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import {
@@ -49,7 +50,8 @@ export default function GameScreen() {
   const [state, dispatch] = useReducer(gameReducer, null, () => createInitialState(Date.now()));
   const loaded = useGameSave(state, dispatch);
   const [draggingFrom, setDraggingFrom] = useState<number | null>(null);
-  const [selectedAnimal, setSelectedAnimal] = useState<number | null>(null);
+  /** Açık olan hayvan alanının seviyesi; kapalıysa null. */
+  const [enclosure, setEnclosure] = useState<number | null>(null);
   const [upgradesOpen, setUpgradesOpen] = useState(false);
   /** "Oyunu baştan başlat"a basıldı; ebeveyn kapısı açık. */
   const [resetAsked, setResetAsked] = useState(false);
@@ -180,31 +182,15 @@ export default function GameScreen() {
         parkLimit={parkLimit}
       />
 
-      <Park
+      <Zoo
         animals={state.park}
         now={state.now}
         gold={state.gold}
-        onUpgradeSkill={(id) => {
-          dispatch({ type: 'upgradeSkill', id });
-          haptic('success');
-        }}
         incomeBonus={incomeBonus}
-        food={state.food}
-        onFeed={(id) => {
-          dispatch({ type: 'feedAnimal', id });
-          haptic('success');
-        }}
+        discovered={state.discovered}
         targetRef={targetRef}
-        onOpenAnimals={(tab) => {
-          setSelectedAnimal(null);
-          setAnimalsTab(tab);
-        }}
-        selectedId={selectedAnimal}
-        onSelect={setSelectedAnimal}
-        onRelease={(id) => {
-          dispatch({ type: 'releaseAnimal', id });
-          setSelectedAnimal(null);
-        }}
+        onOpenAnimals={setAnimalsTab}
+        onOpenEnclosure={setEnclosure}
       />
 
       <Incubator
@@ -309,7 +295,7 @@ export default function GameScreen() {
             dispatch({ type: 'reset', now: Date.now() });
             setResetAsked(false);
             setUpgradesOpen(false);
-            setSelectedAnimal(null);
+            setEnclosure(null);
           }}
           onCancel={() => setResetAsked(false)}
         />
@@ -339,6 +325,32 @@ export default function GameScreen() {
             // Rehberin son adımı: hayvanlar beslendi, "Aferin!" yazısından sonra panel kapanınca rehber biter.
             if (state.tutorialStep !== null && state.tutorialStep > TUTORIAL_ANIMALS) dispatch({ type: 'finishTutorial' });
           }}
+        />
+      )}
+
+      {enclosure !== null && (
+        <EnclosureView
+          state={state}
+          level={enclosure}
+          onFeed={(id) => {
+            dispatch({ type: 'feedAnimal', id });
+            haptic('success');
+          }}
+          onBuyFood={() => {
+            setEnclosure(null);
+            setAnimalsTab('food');
+          }}
+          onUpgradeSkill={(id) => {
+            dispatch({ type: 'upgradeSkill', id });
+            haptic('success');
+          }}
+          onRelease={(id) => {
+            dispatch({ type: 'releaseAnimal', id });
+            // Alandaki son hayvan salınınca alan kapanır.
+            if (state.park.filter((a) => a.level === enclosure).length <= 1) setEnclosure(null);
+          }}
+          onPet={() => haptic('merge')}
+          onClose={() => setEnclosure(null)}
         />
       )}
 

@@ -41,7 +41,7 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - 4x3 birleştirme alanı, sürükle-bırak ile birleştirme. Hayvanlar sırayla bulunur: birleştirmeyle en fazla bir sonraki bulunmamış hayvanın yumurtası yapılabilir (köpek çıkmadan panda yumurtası olmaz, "🐶 Önce bir köpek çıkar!" yazar).
 - Her hayvanın yumurtası hep aynı renk (civciv sarı, kedi turuncu ...); nadir parlak (✨) yumurta %50 fazla kazandırır, birleşince parlaklık korunur
 - 2 yuvalı kuluçka makinesi
-- Parkta gezen ve altın düşüren hayvanlar, doğaya salma
+- Hayvanat bahçesi: her hayvanın kendi alanı var (10 alan, altında adı yazar; bulunmamış hayvanın alanında "?" durur). Alanda o türden kaç hayvan olduğu (×3), acıkan olup olmadığı ve düşen altın görünür. Alana dokununca hayvan büyük görünür; aynı türden birden çok hayvan varsa ◀ ▶ oklarla gezilir. Orada besle, ❤️ sev (hayvan zıplar, kalpler uçar), yetenek geliştir, doğaya sal.
 - "Yeni hayvan!" kutlaması ve elmas ödülü
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
