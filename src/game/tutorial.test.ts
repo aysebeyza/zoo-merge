@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { FIRST_HATCH_SEC, TUTORIAL_ANIMALS } from './config.ts';
 import { parseSave, SAVE_VERSION } from './save.ts';
-import { createInitialState, gameReducer, type GameState } from './state.ts';
+import { bestFood, createInitialState, gameReducer, type GameState } from './state.ts';
 import { tutorialHint } from './tutorial.ts';
 
 const T0 = 1_000_000;
@@ -27,7 +27,11 @@ function follow(state: GameState, ui = { animalsOpen: false }): GameState {
       ui.animalsOpen = true;
       return state;
     }
-    if (hint.target.startsWith('feed-')) return gameReducer(state, { type: 'feedAnimal', id: Number(hint.target.slice(5)) });
+    if (hint.target.startsWith('feed-')) {
+      const id = Number(hint.target.slice(5));
+      const animal = state.park.find((a) => a.id === id)!;
+      return gameReducer(state, { type: 'feedAnimal', id, food: bestFood(state, animal)! });
+    }
     // Paneli kapatınca rehber biter (arayüz finishTutorial gönderir).
     ui.animalsOpen = false;
     return gameReducer(state, { type: 'finishTutorial' });
@@ -79,7 +83,7 @@ describe('ilk oyun rehberi', () => {
     assert.equal(state.basket > 0 && state.grid.includes(null), true);
     assert.equal(gameReducer(state, { type: 'takeEgg' }), state);
     const chick = state.park.find((a) => a.level === 1)!;
-    assert.equal(gameReducer(state, { type: 'feedAnimal', id: chick.id }).food[1], 0);
+    assert.equal(gameReducer(state, { type: 'feedAnimal', id: chick.id, food: 'seed' }).food.seed, 0);
   });
 
   it('rehber bitince her hamle serbest', () => {
@@ -123,7 +127,7 @@ describe('ilk oyun rehberi', () => {
     const levels = state.levelUps.length;
     assert.ok(levels > 0);
     assert.equal(state.level, 1 + levels);
-    assert.deepEqual(state.food, { 1: levels, 2: levels, 3: levels });
+    assert.deepEqual(state.food, { seed: levels, carrot: levels, fish: levels });
     assert.ok(state.park.every((a) => a.fedAt === state.now));
     assert.equal(state.tutorialStep, null);
     assert.deepEqual(order, [1, 2, 3]);

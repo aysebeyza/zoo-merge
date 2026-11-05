@@ -1,12 +1,26 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type HostInstance } from 'react-native';
 
-import { animalFor, foodPrice, FULLNESS_COLOR, HUNGER_SEC, MAX_SKILL, moodFor, skillFor } from '@/game/config';
+import {
+  animalFor,
+  dayNumber,
+  foodFor,
+  FOODS,
+  FULLNESS_COLOR,
+  HUNGER_SEC,
+  MAX_SKILL,
+  moodFor,
+  skillFor,
+  wishFor,
+  type FoodConfig,
+  type FoodId,
+} from '@/game/config';
 import { formatNumber, formatWait } from '@/game/format';
 import {
-  animalCount,
   animalIncomePerSecond,
+  bestFood,
   canFeed,
+  foodPrice,
   foodStock,
   fullnessAt,
   hungryAt,
@@ -15,6 +29,8 @@ import {
   skillCost,
   skillUnlockAt,
   stateIncomeBonus,
+  wantedFood,
+  wishPending,
   type GameState,
   type ParkAnimal,
 } from '@/game/state';
@@ -25,8 +41,8 @@ type Props = {
   state: GameState;
   /** Açılınca hangi sekme görünsün; parktan "Yem al" ile gelinince yem dükkanı. */
   initialTab: AnimalsTab;
-  onFeed: (id: number) => void;
-  onBuyFood: (level: number) => void;
+  onFeed: (id: number, food: FoodId) => void;
+  onBuyFood: (food: FoodId) => void;
   onBuyMissingFood: () => void;
   onUpgradeSkill: (id: number) => void;
   onRelease: (id: number) => void;
@@ -50,7 +66,6 @@ export function AnimalsPanel({
   const [tab, setTab] = useState<AnimalsTab>(initialTab);
   // En aç hayvan en üstte: çocuk kimi beslemesi gerektiğini hemen görsün.
   const animals = [...state.park].sort((a, b) => fullnessAt(a, state.now) - fullnessAt(b, state.now));
-  const foodLevels = [...state.discovered].sort((a, b) => a - b);
 
   return (
     <View style={styles.overlay}>
@@ -63,8 +78,12 @@ export function AnimalsPanel({
           </Pressable>
         </View>
         <View style={styles.tabs}>
-          <Tab label={`🐾 Hayvanlar (${state.park.length})`} active={tab === 'animals'} onPress={() => setTab('animals')} />
-          <Tab label="🛒 Yem dükkanı" active={tab === 'food'} onPress={() => setTab('food')} />
+          <Tab
+            label={`🐾 Hayvanlar (${state.park.length})`}
+            active={tab === 'animals'}
+            onPress={() => setTab('animals')}
+          />
+          <Tab label="🛒 Dükkân" active={tab === 'food'} onPress={() => setTab('food')} />
         </View>
         <ScrollView contentContainerStyle={styles.list}>
           {tab === 'animals' &&
@@ -76,7 +95,7 @@ export function AnimalsPanel({
                   key={animal.id}
                   animal={animal}
                   state={state}
-                  onFeed={() => onFeed(animal.id)}
+                  onFeed={(food) => onFeed(animal.id, food)}
                   onBuyFood={() => setTab('food')}
                   onUpgradeSkill={() => onUpgradeSkill(animal.id)}
                   onRelease={() => onRelease(animal.id)}
@@ -84,17 +103,14 @@ export function AnimalsPanel({
                 />
               ))
             ))}
-          {tab === 'food' &&
-            (foodLevels.length === 0 ? (
-              <Text style={styles.empty}>Bir hayvan bulunca onun yemi burada satılır.</Text>
-            ) : (
-              <>
-                <MissingFood state={state} onBuy={onBuyMissingFood} />
-                {foodLevels.map((level) => (
-                  <FoodRow key={level} level={level} state={state} onBuy={() => onBuyFood(level)} />
-                ))}
-              </>
-            ))}
+          {tab === 'food' && (
+            <>
+              <MissingFood state={state} onBuy={onBuyMissingFood} />
+              {FOODS.map((food) => (
+                <FoodRow key={food.id} food={food} state={state} onBuy={() => onBuyFood(food.id)} />
+              ))}
+            </>
+          )}
         </ScrollView>
       </View>
     </View>
@@ -112,7 +128,7 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
 type AnimalRowProps = {
   animal: ParkAnimal;
   state: GameState;
-  onFeed: () => void;
+  onFeed: (food: FoodId) => void;
   onBuyFood: () => void;
   onUpgradeSkill: () => void;
   onRelease: () => void;
@@ -124,7 +140,9 @@ function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease
   const bonus = stateIncomeBonus(state);
   const fullness = fullnessAt(animal, state.now);
   const mood = moodFor(fullness);
-  const stock = foodStock(state, animal.level);
+  // Besle düğmesi stoktaki en uygun yiyeceği verir: önce bugünkü isteği, sonra sevdiği.
+  const food = bestFood(state, animal);
+  const wanted = foodFor(wantedFood(animal, state.now));
   const unlockAt = skillUnlockAt(animal);
   const cost = skillCost(animal, bonus);
 
@@ -150,7 +168,9 @@ function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease
       </View>
       {/* Tokluk çubuğu: yeşil tok, sarı acıkmış, turuncu üzgün, kırmızı kaçmak üzere. */}
       <View style={styles.bar}>
-        <View style={[styles.barFill, { width: `${Math.max(4, fullness * 100)}%`, backgroundColor: FULLNESS_COLOR[mood] }]} />
+        <View
+          style={[styles.barFill, { width: `${Math.max(4, fullness * 100)}%`, backgroundColor: FULLNESS_COLOR[mood] }]}
+        />
       </View>
       {/* "Ne zaman beslemeliyim?" sorusunun cevabı; ham saat yerine çocuğun anlayacağı bir cümle. */}
       <Text style={[styles.status, mood === 'leaving' && styles.statusAlarm, mood === 'happy' && styles.statusCalm]}>
@@ -161,19 +181,19 @@ function AnimalRow({ animal, state, onFeed, onBuyFood, onUpgradeSkill, onRelease
             : '🍖 Şimdi besle!'}
       </Text>
       <View style={styles.actions}>
-        {stock > 0 ? (
+        {food !== null ? (
           <Pressable
             ref={feedRef}
             style={[styles.button, styles.feed, !canFeed(state, animal) && styles.disabled]}
             disabled={!canFeed(state, animal)}
-            onPress={onFeed}>
+            onPress={() => onFeed(food)}>
             <Text style={styles.buttonText}>
-              {config.food.emoji} Besle ×{stock}
+              {foodFor(food).emoji} Besle ×{foodStock(state, food)}
             </Text>
           </Pressable>
         ) : (
           <Pressable style={[styles.button, styles.buyFood]} onPress={onBuyFood}>
-            <Text style={styles.buttonText}>{config.food.emoji} Yem al</Text>
+            <Text style={styles.buttonText}>{wanted.emoji} Yem al</Text>
           </Pressable>
         )}
         {unlockAt === null || cost === null ? (
@@ -205,40 +225,48 @@ function MissingFood({ state, onBuy }: { state: GameState; onBuy: () => void }) 
   const { cost } = missingFood(state);
   return (
     <View style={styles.summary}>
-      <Text style={styles.summaryText}>🍽️ Bir yem hayvanı yaklaşık {formatWait(HUNGER_SEC)} doyurur.</Text>
+      <Text style={styles.summaryText}>
+        🍽️ Her yiyecek hayvanı yaklaşık {formatWait(HUNGER_SEC)} doyurur. Hayvan sevmediğini yemez; bugün istediğini
+        yerse yıldız kazanırsın!
+      </Text>
       {cost > 0 ? (
         <Pressable
           style={[styles.button, styles.missing, state.gold < cost && styles.disabled]}
           disabled={state.gold < cost}
           onPress={onBuy}>
-          <Text style={styles.buyText}>🛒 Eksikleri al: 🪙 {formatNumber(cost)}</Text>
+          <Text style={styles.buyText}>🛒 İstediklerini al: 🪙 {formatNumber(cost)}</Text>
         </Pressable>
       ) : (
-        <Text style={styles.summaryDone}>✅ Her hayvanın bir yemi var</Text>
+        <Text style={styles.summaryDone}>✅ Her hayvanın istediği yiyecek var</Text>
       )}
     </View>
   );
 }
 
-function FoodRow({ level, state, onBuy }: { level: number; state: GameState; onBuy: () => void }) {
-  const config = animalFor(level);
-  const price = foodPrice(level);
-  const stock = foodStock(state, level);
-  const count = animalCount(state, level);
-  // Parktaki bu hayvanlara yetecek kadar yem yoksa satır öne çıkar.
-  const short = stock < count;
-
+/** Yiyecek satırı: stok, fiyat ve bugün bu yiyeceği isteyen hayvanlar (satır öne çıkar). */
+function FoodRow({ food, state, onBuy }: { food: FoodConfig; state: GameState; onBuy: () => void }) {
+  const price = foodPrice(state);
+  const stock = foodStock(state, food.id);
+  const day = dayNumber(state.now);
+  const wanting = [
+    ...new Set(
+      state.park.filter((a) => wishPending(a, state.now) && wishFor(a.level, day) === food.id).map((a) => a.level),
+    ),
+  ];
   return (
-    <View style={[styles.card, styles.row, short && styles.hungryCard]}>
-      <Text style={styles.emoji}>{config.food.emoji}</Text>
+    <View style={[styles.card, styles.row, wanting.length > 0 && styles.wishCard]}>
+      <Text style={styles.emoji}>{food.emoji}</Text>
       <View style={styles.info}>
-        <Text style={styles.name}>{config.food.name}</Text>
+        <Text style={styles.name}>{food.name}</Text>
         <Text style={styles.detail}>
-          {count > 0 ? `Parkta ${count} ${config.name.toLocaleLowerCase('tr')} var` : `${config.name} yemi`} · Stok:{' '}
-          <Text style={short && styles.shortStock}>{stock}</Text>
+          {wanting.length > 0 ? `💭 Bugün isteyen: ${wanting.map((l) => animalFor(l).emoji).join(' ')} · ` : ''}Stok:{' '}
+          {stock}
         </Text>
       </View>
-      <Pressable style={[styles.button, styles.buy, state.gold < price && styles.disabled]} disabled={state.gold < price} onPress={onBuy}>
+      <Pressable
+        style={[styles.button, styles.buy, state.gold < price && styles.disabled]}
+        disabled={state.gold < price}
+        onPress={onBuy}>
         <Text style={styles.buyText}>🪙 {formatNumber(price)}</Text>
       </Pressable>
     </View>
@@ -246,6 +274,16 @@ function FoodRow({ level, state, onBuy }: { level: number; state: GameState; onB
 }
 
 const styles = StyleSheet.create({
+  sectionTitle: {
+    marginTop: 6,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#5B3A1E',
+  },
+  wishCard: {
+    borderWidth: 2,
+    borderColor: '#FFB020',
+  },
   overlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(30,20,10,0.55)',

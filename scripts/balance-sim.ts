@@ -5,7 +5,7 @@
 // - Aralıksız oynayan: hiç ara vermeden oynar.
 // - Günde 3 kez oynayan: 08:00, 15:00 ve 20:00'de 20'şer dakika oynar; arada oyun kapalıdır.
 
-import { ANIMALS, foodPrice, MAX_LEVEL, upgradeCost, upgradeFor, UPGRADES, type UpgradeId } from '../src/game/config.ts';
+import { ANIMALS, MAX_LEVEL, upgradeCost, upgradeFor, UPGRADES, type UpgradeId } from '../src/game/config.ts';
 import { formatNumber } from '../src/game/format.ts';
 import {
   canAffordUpgrade,
@@ -13,7 +13,10 @@ import {
   canFeed,
   canMerge,
   createInitialState,
+  foodPrice,
   foodStock,
+  isDirty,
+  wantedFood,
   fullnessAt,
   gameReducer,
   hungryAt,
@@ -65,10 +68,16 @@ function play(state: GameState, random: () => number): GameState {
     // 1. Acıkan hayvanları besle; yemi yoksa önce al.
     for (const animal of s.park) {
       if (s.now < hungryAt(animal)) continue;
-      if (foodStock(s, animal.level) === 0 && s.gold >= foodPrice(animal.level)) {
-        changed = run({ type: 'buyFood', level: animal.level }) || changed;
-      }
-      if (canFeed(s, animal)) changed = run({ type: 'feedAnimal', id: animal.id }) || changed;
+      // Bugün istediği yiyeceği (yoksa en bilinen yiyeceğini) verir.
+      const food = wantedFood(animal, s.now);
+      if (foodStock(s, food) === 0 && s.gold >= foodPrice(s)) changed = run({ type: 'buyFood', food }) || changed;
+      if (canFeed(s, animal)) changed = run({ type: 'feedAnimal', id: animal.id, food }) || changed;
+    }
+
+    // Kirlenen hayvanları yıka, kakaları temizle.
+    for (const animal of s.park) if (isDirty(animal, s.now)) changed = run({ type: 'washAnimal', id: animal.id }) || changed;
+    for (let level = 1; level <= MAX_LEVEL; level++) {
+      while ((s.poops[level] ?? 0) > 0) changed = run({ type: 'cleanPoop', level }) || changed;
     }
 
     // 2. Hazır yetenekleri geliştir.

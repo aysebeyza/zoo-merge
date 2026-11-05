@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 
 import type { AnimalsTab } from '@/components/animals-panel';
-import { ANIMALS, dayNumber, MAX_LEVEL, moodFor, treatFor, wishFor, xpForLevel, type Mood } from '@/game/config';
+import { ANIMALS, dayNumber, MAX_LEVEL, moodFor, foodFor, wishFor, xpForLevel, type Mood } from '@/game/config';
 import { formatNumber } from '@/game/format';
-import { fullnessAt, skillCost, skillUnlockAt, wishPending, type ParkAnimal } from '@/game/state';
+import { fullnessAt, isDirty, skillCost, skillUnlockAt, wishPending, type ParkAnimal } from '@/game/state';
 
 type Props = {
   animals: ParkAnimal[];
@@ -23,6 +23,8 @@ type Props = {
   incomeBonus: number;
   /** Bulunan hayvanların seviyeleri; bulunmayanın alanında soru işareti durur. */
   discovered: number[];
+  /** Her alandaki kaka sayısı. */
+  poops: Record<number, number>;
   onOpenAnimals: (tab: AnimalsTab) => void;
   /** Bir alana dokunulunca o hayvanın alanı açılır. */
   onOpenEnclosure: (level: number) => void;
@@ -71,6 +73,7 @@ export function Zoo({
   gold,
   incomeBonus,
   discovered,
+  poops,
   onOpenAnimals,
   onOpenEnclosure,
   targetRef,
@@ -105,6 +108,7 @@ export function Zoo({
               level={level}
               animals={animals.filter((a) => a.level === level)}
               found={discovered.includes(level)}
+              poops={poops[level] ?? 0}
               now={now}
               gold={gold}
               incomeBonus={incomeBonus}
@@ -289,7 +293,7 @@ function TipWalker({ until, width, hasTip, tipAmount, onCollect, onGone }: TipWa
             💰
           </Animated.Text>
         )}
-        <Text style={[styles.visitorEmoji, { transform: [{ scaleX: path.facing }] }]}>🧑‍🎒</Text>
+        <Text style={[styles.visitorEmoji, { transform: [{ scaleX: path.facing }] }]}>🦸</Text>
       </Pressable>
       {collected && <CoinPop amount={tipAmount} />}
     </Animated.View>
@@ -301,13 +305,14 @@ type TileProps = {
   /** Bu alandaki hayvanlar (aynı tür). */
   animals: ParkAnimal[];
   found: boolean;
+  poops: number;
   now: number;
   gold: number;
   incomeBonus: number;
   onPress: () => void;
 };
 
-function EnclosureTile({ level, animals, found, now, gold, incomeBonus, onPress }: TileProps) {
+function EnclosureTile({ level, animals, found, poops, now, gold, incomeBonus, onPress }: TileProps) {
   const config = ANIMALS[level - 1];
   const moods = animals.map((a) => moodFor(fullnessAt(a, now)));
   const worst = MOOD_ORDER.find((m) => moods.includes(m)) ?? 'happy';
@@ -319,8 +324,9 @@ function EnclosureTile({ level, animals, found, now, gold, incomeBonus, onPress 
   );
   const star = animals.some((a) => skillReady(a, now, gold, incomeBonus));
   const shiny = animals.some((a) => a.variant.shiny);
+  const dirty = animals.some((a) => isDirty(a, now));
   // Bugünkü isteği bekleyen hayvan varsa istediği ikramın resmi alanın üstünde görünür.
-  const wish = animals.some((a) => wishPending(a, now)) ? treatFor(wishFor(level, dayNumber(now))) : null;
+  const wish = animals.some((a) => wishPending(a, now)) ? foodFor(wishFor(level, dayNumber(now))) : null;
 
   return (
     <Pressable style={styles.tile} onPress={onPress} disabled={animals.length === 0}>
@@ -335,6 +341,8 @@ function EnclosureTile({ level, animals, found, now, gold, incomeBonus, onPress 
         )}
         {animals.length > 1 && <Text style={styles.count}>×{animals.length}</Text>}
         {shiny && <Text style={styles.shiny}>✨</Text>}
+        {dirty && <Text style={styles.fly}>🦟</Text>}
+        {animals.length > 0 && poops > 0 && <Text style={styles.poop}>{'💩'.repeat(Math.min(poops, 2))}</Text>}
       </View>
       {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
       {star && <Text style={styles.skillBubble}>⭐</Text>}
@@ -557,6 +565,18 @@ const styles = StyleSheet.create({
     top: -8,
     right: -4,
     fontSize: 15,
+  },
+  fly: {
+    position: 'absolute',
+    top: 2,
+    left: 3,
+    fontSize: 11,
+  },
+  poop: {
+    position: 'absolute',
+    bottom: 1,
+    left: 2,
+    fontSize: 11,
   },
   wishBubble: {
     position: 'absolute',

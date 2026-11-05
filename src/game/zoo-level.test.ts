@@ -21,6 +21,7 @@ function animal(id: number, level: number): ParkAnimal {
     happiness: 0,
     petAt: 0,
     wishDoneDay: null,
+    washedAt: T0,
   };
 }
 
@@ -43,7 +44,7 @@ describe('bahçe seviyesi', () => {
     assert.equal(state.level, 2);
     assert.equal(state.levelUps.length, 1);
     assert.ok(state.gold > playing().gold);
-    assert.deepEqual(state.food, { 1: 1 });
+    assert.deepEqual(state.food, { seed: 1 });
     assert.equal(gameReducer(state, { type: 'dismissLevelUp' }).levelUps.length, 0);
   });
 

@@ -8,7 +8,8 @@ import {
   BASKET_CAP,
   BASKET_EVERY_SEC,
   BASKET_START,
-  foodPrice,
+  FOOD_MIN_PRICE,
+  TASTES,
   ESCAPE_AFTER_EMPTY_SEC,
   FIRST_HATCH_SEC,
   HUNGER_SEC,
@@ -23,10 +24,12 @@ import { parseSave, SAVE_VERSION, serializeSave } from './save.ts';
 import {
   basketCap,
   createInitialState as createNewGame,
+  foodPrice,
   foodStock,
   fullnessAt,
   hungryAt,
   missingFood,
+  wantedFood,
   nextBasketEggAt,
   gameReducer,
   goldPerSecond,
@@ -216,6 +219,7 @@ describe('kuluçka ve park', () => {
       happiness: 0,
       petAt: 0,
       wishDoneDay: null,
+      washedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT);
@@ -274,7 +278,7 @@ describe('oyun kapalıyken', () => {
     const back = gameReducer(state, { type: 'tick', now: away });
     // Civciv ilk 2 saatte tok (%50'nin üstünde): 2 saatlik tam kazanç.
     assert.equal(back.gold - state.gold, CHICK_PER_SEC * OFFLINE_EARNING_CAP_SEC);
-    const fed = gameReducer({ ...back, food: { 1: 1 } }, { type: 'feedAnimal', id: back.park[0].id });
+    const fed = gameReducer({ ...back, food: { seed: 1 } }, { type: 'feedAnimal', id: back.park[0].id, food: 'seed' });
     const later = gameReducer(fed, { type: 'tick', now: away + CHICK_EVERY_MS });
     assert.equal(later.gold - fed.gold, CHICK_DROP);
   });
@@ -399,6 +403,7 @@ describe('yükseltmeler', () => {
       happiness: 0,
       petAt: 0,
       wishDoneDay: null,
+      washedAt: T0,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT + 1);
@@ -430,40 +435,37 @@ describe('besleme', () => {
     assert.equal(at(0), 0);
   });
 
-  it('yem dükkanından hayvanın yemi alınır, fiyatı 5 dakikalık kazancı', () => {
+  it('dükkândan yiyecek alınır; fiyat parkın 30 saniyelik kazancı, en az 20 altın', () => {
     const { state } = withChick();
-    assert.equal(foodPrice(1), Math.ceil(CHICK_PER_SEC * 5 * 60));
-    const bought = gameReducer({ ...state, gold: 1000 }, { type: 'buyFood', level: 1 });
-    assert.equal(bought.gold, 1000 - foodPrice(1));
-    assert.equal(foodStock(bought, 1), 1);
-  });
-
-  it('altın yetmezse ya da hayvan henüz bulunmadıysa yem alınamaz', () => {
-    const { state } = withChick();
+    assert.equal(foodPrice(state), FOOD_MIN_PRICE);
+    const bought = gameReducer({ ...state, gold: 1000 }, { type: 'buyFood', food: 'seed' });
+    assert.equal(bought.gold, 1000 - FOOD_MIN_PRICE);
+    assert.equal(foodStock(bought, 'seed'), 1);
     const poor = { ...state, gold: 10 };
-    assert.equal(gameReducer(poor, { type: 'buyFood', level: 1 }), poor);
-    const rich = { ...state, gold: 1e9 };
-    assert.equal(gameReducer(rich, { type: 'buyFood', level: 5 }), rich);
+    assert.equal(gameReducer(poor, { type: 'buyFood', food: 'seed' }), poor);
   });
 
-  it('hayvan kendi yemiyle tamamen doyar, stoktan bir yem gider', () => {
+  it('hayvan yediği yiyecekle tamamen doyar, stoktan bir tane gider', () => {
     const { state, hatchAt } = withChick();
-    const hungry = gameReducer({ ...state, food: { 1: 2 } }, { type: 'tick', now: hatchAt + 3 * HOUR });
-    const fed = gameReducer(hungry, { type: 'feedAnimal', id: hungry.park[0].id });
+    const hungry = gameReducer({ ...state, food: { seed: 2 } }, { type: 'tick', now: hatchAt + 3 * HOUR });
+    const fed = gameReducer(hungry, { type: 'feedAnimal', id: hungry.park[0].id, food: 'seed' });
     assert.equal(fullnessAt(fed.park[0], fed.now), 1);
-    assert.equal(foodStock(fed, 1), 1);
+    assert.equal(foodStock(fed, 'seed'), 1);
   });
 
-  it('yemi yoksa ya da zaten tok ise beslenmez', () => {
+  it('sevmediği yiyeceği yemez; yiyecek yoksa ya da tok ise beslenmez', () => {
     const { state, hatchAt } = withChick();
     const id = state.park[0].id;
-    const noFood = gameReducer(state, { type: 'tick', now: hatchAt + 3 * HOUR });
-    assert.equal(gameReducer(noFood, { type: 'feedAnimal', id }), noFood);
-    // Başka hayvanın yemi işe yaramaz.
-    const wrongFood = { ...noFood, food: { 2: 5 } };
-    assert.equal(gameReducer(wrongFood, { type: 'feedAnimal', id }), wrongFood);
-    const full = { ...state, food: { 1: 5 } };
-    assert.equal(gameReducer(full, { type: 'feedAnimal', id }), full);
+    const hungry = gameReducer(state, { type: 'tick', now: hatchAt + 3 * HOUR });
+    assert.equal(gameReducer(hungry, { type: 'feedAnimal', id, food: 'seed' }), hungry);
+    // Civciv peynir sevmez: yemez, peynir stokta kalır, sevmediği öğrenilir.
+    const dislike = TASTES[1].dislikes[0];
+    const offered = gameReducer({ ...hungry, food: { [dislike]: 1 } }, { type: 'feedAnimal', id, food: dislike });
+    assert.equal(foodStock(offered, dislike), 1);
+    assert.equal(offered.park[0].fedAt, hungry.park[0].fedAt);
+    assert.deepEqual(offered.triedFoods[1], [dislike]);
+    const full = { ...state, food: { seed: 5 } };
+    assert.equal(gameReducer(full, { type: 'feedAnimal', id, food: 'seed' }), full);
   });
 
   it('uzun süre aç kalan hayvan kaçar ve parlaklığını koruyarak yumurtasına döner', () => {
@@ -497,21 +499,26 @@ describe('besleme', () => {
     assert.equal(hungryAt(state.park[0]), hatchAt + HUNGER_SEC * 500);
   });
 
-  it('eksik yemler: parktaki her hayvana birer yem olacak kadar', () => {
+  it('eksik yiyecekler: her hayvana istediği yiyecekten birer tane', () => {
     const { state } = withChick();
     const cat = { ...state.park[0], level: 3 };
     const park = [state.park[0], { ...cat, id: 50 }, { ...cat, id: 51 }, { ...cat, id: 52 }];
-    // 1 civciv ve 3 kedi; stokta 1 tohum ve 1 balık var: 2 balık eksik.
-    const s = { ...state, park, discovered: [1, 3], food: { 1: 1, 3: 1 } };
-    assert.deepEqual(missingFood(s), { items: { 3: 2 }, cost: 2 * foodPrice(3) });
+    const s = { ...state, park, discovered: [1, 3], food: {} };
+    const chickWants = wantedFood(park[0], s.now);
+    const catWants = wantedFood(park[1], s.now);
+    assert.deepEqual(missingFood(s), { items: { [chickWants]: 1, [catWants]: 3 }, cost: 4 * foodPrice(s) });
+    // Stokta 1 tane varsa o eksikten düşer.
+    const stocked = { ...s, food: { [catWants]: 1 } };
+    assert.equal(missingFood(stocked).items[catWants], 2);
   });
 
-  it('eksikleri al, altın yetiyorsa eksik yemlerin hepsini birden alır', () => {
+  it('istediklerini al, altın yetiyorsa eksiklerin hepsini birden alır', () => {
     const { state } = withChick();
     const s = { ...state, park: [state.park[0], { ...state.park[0], id: 50 }], gold: 1000 };
+    const wants = wantedFood(state.park[0], s.now);
     const bought = gameReducer(s, { type: 'buyMissingFood' });
-    assert.equal(foodStock(bought, 1), 2);
-    assert.equal(bought.gold, 1000 - 2 * foodPrice(1));
+    assert.equal(foodStock(bought, wants), 2);
+    assert.equal(bought.gold, 1000 - 2 * foodPrice(s));
     // Eksik kalmadı, tekrar basınca bir şey olmaz; altın yetmezse de olmaz.
     assert.equal(gameReducer(bought, { type: 'buyMissingFood' }), bought);
     const poor = { ...s, gold: 10 };

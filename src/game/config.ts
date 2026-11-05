@@ -12,24 +12,22 @@ export type AnimalConfig = {
   incubationSec: number;
   /** Yumurtanın rengi: her hayvanın yumurtası hep aynı renktir, çocuk rengine bakıp eşleşeni bulur. */
   eggColor: string;
-  /** Hayvanın kendi yemi; yem dükkanından alınır, bir tanesi hayvanı tamamen doyurur. */
-  food: { emoji: string; name: string };
 };
 
 // Altın kazancı dokümandaki tablonun yaklaşık 10'da 1'i: oyuncular bir günde 20 milyona ulaşıyordu.
 // Seviyeler arasındaki oran (yaklaşık 2,2 kat) korunur; küçükler sık, büyükler seyrek düşürür.
 // prettier-ignore
 export const ANIMALS: readonly AnimalConfig[] = [
-  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 10, dropAmount: 1, incubationSec: 10, eggColor: '#FFD93D', food: { emoji: '🌾', name: 'Tohum' } },
-  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 8, dropAmount: 2, incubationSec: 30, eggColor: '#FF9EC4', food: { emoji: '🥕', name: 'Havuç' } },
-  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 6, dropAmount: 3, incubationSec: 90, eggColor: '#FF9F45', food: { emoji: '🐟', name: 'Balık' } },
-  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 6, dropAmount: 7, incubationSec: 4 * 60, eggColor: '#C68B59', food: { emoji: '🦴', name: 'Kemik' } },
-  { level: 5, name: 'Penguen', emoji: '🐧', dropEverySec: 6, dropAmount: 16, incubationSec: 8 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
-  { level: 6, name: 'Tilki', emoji: '🦊', dropEverySec: 6, dropAmount: 36, incubationSec: 15 * 60, eggColor: '#E8572A', food: { emoji: '🍇', name: 'Üzüm' } },
-  { level: 7, name: 'Panda', emoji: '🐼', dropEverySec: 8, dropAmount: 108, incubationSec: 30 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
-  { level: 8, name: 'Kanguru', emoji: '🦘', dropEverySec: 8, dropAmount: 240, incubationSec: 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥬', name: 'Marul' } },
-  { level: 9, name: 'Zürafa', emoji: '🦒', dropEverySec: 8, dropAmount: 540, incubationSec: 2 * 60 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
-  { level: 10, name: 'Unicorn', emoji: '🦄', dropEverySec: 10, dropAmount: 1500, incubationSec: 4 * 60 * 60, eggColor: '#B983FF', food: { emoji: '🌸', name: 'Çiçek' } },
+  { level: 1, name: 'Civciv', emoji: '🐥', dropEverySec: 10, dropAmount: 1, incubationSec: 10, eggColor: '#FFD93D' },
+  { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 8, dropAmount: 2, incubationSec: 30, eggColor: '#FF9EC4' },
+  { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 6, dropAmount: 3, incubationSec: 90, eggColor: '#FF9F45' },
+  { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 6, dropAmount: 7, incubationSec: 4 * 60, eggColor: '#C68B59' },
+  { level: 5, name: 'Penguen', emoji: '🐧', dropEverySec: 6, dropAmount: 16, incubationSec: 8 * 60, eggColor: '#4D96FF' },
+  { level: 6, name: 'Tilki', emoji: '🦊', dropEverySec: 6, dropAmount: 36, incubationSec: 15 * 60, eggColor: '#E8572A' },
+  { level: 7, name: 'Panda', emoji: '🐼', dropEverySec: 8, dropAmount: 108, incubationSec: 30 * 60, eggColor: '#E4E4E4' },
+  { level: 8, name: 'Kanguru', emoji: '🦘', dropEverySec: 8, dropAmount: 240, incubationSec: 60 * 60, eggColor: '#FF6B6B' },
+  { level: 9, name: 'Zürafa', emoji: '🦒', dropEverySec: 8, dropAmount: 540, incubationSec: 2 * 60 * 60, eggColor: '#6BCB77' },
+  { level: 10, name: 'Unicorn', emoji: '🦄', dropEverySec: 10, dropAmount: 1500, incubationSec: 4 * 60 * 60, eggColor: '#B983FF' },
 ];
 
 /** Alınan ya da bedava gelen yumurtanın nadir parlak (✨) olma şansı. Öneri; testlerde ayarlanacak. */
@@ -269,10 +267,12 @@ export const ESCAPE_AFTER_EMPTY_SEC = FAST_HUNGER ? 5 * 60 : 8 * 60 * 60;
 export const HUNGRY_BELOW = FAST_HUNGER ? 2 / 3 : 0.5;
 const SAD_BELOW = FAST_HUNGER ? 1 / 3 : 0.2;
 /**
- * Bir yemin fiyatı: o hayvanın (yetenek ve bonuslar hariç) bu kadar saniyelik kazancı. Bir yem hayvanı
- * tamamen doyurur. Öneri; testlerde ayarlanacak.
+ * Bir yiyeceğin fiyatı: parkın (bonuslar dahil) bu kadar saniyelik kazancı, en az FOOD_MIN_PRICE.
+ * Yiyecekler bütün hayvanlar için ortak olduğundan fiyat oyunun ilerleyişine göre artar.
+ * Her hayvan 4 saatte bir yer; 10 hayvanlık park için bu, 4 saatte yaklaşık 5 dakikalık kazanç eder.
  */
-export const FOOD_COST_SEC = 5 * 60;
+export const FOOD_COST_SEC = 30;
+export const FOOD_MIN_PRICE = 20;
 /** Tokluğu bunun üstünde olan hayvan beslenmez; yem boşa gitmesin. */
 export const FEED_BELOW = 0.95;
 /**
@@ -281,11 +281,6 @@ export const FEED_BELOW = 0.95;
  */
 export const AUTO_FEEDER_REFUND = 250;
 
-/** Hayvanın yeminin fiyatı. */
-export function foodPrice(level: number): number {
-  const animal = animalFor(level);
-  return Math.ceil((animal.dropAmount / animal.dropEverySec) * FOOD_COST_SEC);
-}
 
 export type Mood = 'happy' | 'hungry' | 'sad' | 'leaving';
 
@@ -368,56 +363,70 @@ export const LEVEL_GOLD_MIN = 100;
 export const LEVEL_DIAMOND_EVERY = 5;
 export const LEVEL_DIAMONDS = 2;
 
-// --- İkramlar, günün isteği ve mutluluk ---
-// Yemden ayrı, ikram dükkanından alınan yiyecekler. Her hayvanın sevdiği ve sevmediği ikramlar var;
-// çocuk denedikçe öğrenir. Her gün her hayvan sevdiklerinden birini ister (başında resmi çıkar).
-// İkram ve sevgi mutluluk çubuğunu doldurur; çubuk dolunca bahçe yıldız puanı kazanır.
+// --- Yiyecekler, günün isteği ve mutluluk ---
+// Bütün hayvanlar aynı yiyecek listesinden yer; dükkândan alınır, stokta durur. Her hayvanın sevdiği
+// 3 yiyecek (ilki en bilineni: civciv tohum, tavşan havuç ...) ve sevmediği 1-2 yiyecek var; çocuk
+// denedikçe öğrenir. Sevmediğini yemez; geri kalan her yiyecek onu doyurur. Her gün her hayvan
+// sevdiklerinden birini ister (başında resmi çıkar); acıkınca o verilirse yıldız puanı gelir.
 
-export type TreatId =
+export type FoodId =
+  | 'seed'
+  | 'carrot'
+  | 'fish'
+  | 'bone'
   | 'apple'
   | 'strawberry'
   | 'banana'
   | 'watermelon'
   | 'cheese'
-  | 'peanut'
-  | 'honey'
-  | 'cookie'
+  | 'grape'
+  | 'bamboo'
+  | 'leaf'
   | 'icecream'
-  | 'lemon';
+  | 'flower';
 
-export type TreatConfig = { id: TreatId; emoji: string; name: string };
+export type FoodConfig = { id: FoodId; emoji: string; name: string };
 
-export const TREATS: readonly TreatConfig[] = [
+export const FOODS: readonly FoodConfig[] = [
+  { id: 'seed', emoji: '🌾', name: 'Tohum' },
+  { id: 'carrot', emoji: '🥕', name: 'Havuç' },
+  { id: 'fish', emoji: '🐟', name: 'Balık' },
+  { id: 'bone', emoji: '🦴', name: 'Kemik' },
   { id: 'apple', emoji: '🍎', name: 'Elma' },
   { id: 'strawberry', emoji: '🍓', name: 'Çilek' },
   { id: 'banana', emoji: '🍌', name: 'Muz' },
   { id: 'watermelon', emoji: '🍉', name: 'Karpuz' },
   { id: 'cheese', emoji: '🧀', name: 'Peynir' },
-  { id: 'peanut', emoji: '🥜', name: 'Fıstık' },
-  { id: 'honey', emoji: '🍯', name: 'Bal' },
-  { id: 'cookie', emoji: '🍪', name: 'Kurabiye' },
+  { id: 'grape', emoji: '🍇', name: 'Üzüm' },
+  { id: 'bamboo', emoji: '🎋', name: 'Bambu' },
+  { id: 'leaf', emoji: '🍃', name: 'Yaprak' },
   { id: 'icecream', emoji: '🍦', name: 'Dondurma' },
-  { id: 'lemon', emoji: '🍋', name: 'Limon' },
+  { id: 'flower', emoji: '🌸', name: 'Çiçek' },
 ];
 
-export function treatFor(id: TreatId): TreatConfig {
-  return TREATS.find((t) => t.id === id)!;
+export function foodFor(id: FoodId): FoodConfig {
+  return FOODS.find((f) => f.id === id)!;
 }
 
-/** Her hayvanın sevdiği 3 ve sevmediği 1-2 ikram; listede olmayanlar ona göre "fena değil". */
+/** Her hayvanın sevdiği 3 (ilki en bilineni) ve sevmediği yiyecekler; listede olmayanlar "fena değil". */
 // prettier-ignore
-export const TASTES: Record<number, { likes: TreatId[]; dislikes: TreatId[] }> = {
-  1: { likes: ['strawberry', 'watermelon', 'cookie'], dislikes: ['cheese', 'lemon'] }, // civciv
-  2: { likes: ['apple', 'strawberry', 'watermelon'], dislikes: ['cheese', 'honey'] }, // tavşan
-  3: { likes: ['cheese', 'icecream', 'cookie'], dislikes: ['lemon', 'banana'] }, // kedi
-  4: { likes: ['cookie', 'cheese', 'peanut'], dislikes: ['lemon'] }, // köpek
-  5: { likes: ['icecream', 'watermelon', 'cheese'], dislikes: ['banana', 'honey'] }, // penguen
-  6: { likes: ['strawberry', 'honey', 'apple'], dislikes: ['lemon'] }, // tilki
-  7: { likes: ['apple', 'honey', 'banana'], dislikes: ['cheese'] }, // panda
-  8: { likes: ['apple', 'peanut', 'watermelon'], dislikes: ['icecream'] }, // kanguru
-  9: { likes: ['apple', 'banana', 'watermelon'], dislikes: ['cookie', 'lemon'] }, // zürafa
-  10: { likes: ['strawberry', 'icecream', 'cookie'], dislikes: ['lemon', 'cheese'] }, // unicorn
+export const TASTES: Record<number, { likes: FoodId[]; dislikes: FoodId[] }> = {
+  1: { likes: ['seed', 'strawberry', 'watermelon'], dislikes: ['cheese', 'fish'] }, // civciv
+  2: { likes: ['carrot', 'apple', 'strawberry'], dislikes: ['fish', 'bone'] }, // tavşan
+  3: { likes: ['fish', 'cheese', 'icecream'], dislikes: ['carrot', 'banana'] }, // kedi
+  4: { likes: ['bone', 'cheese', 'apple'], dislikes: ['bamboo'] }, // köpek
+  5: { likes: ['fish', 'icecream', 'watermelon'], dislikes: ['banana', 'carrot'] }, // penguen
+  6: { likes: ['grape', 'strawberry', 'apple'], dislikes: ['bamboo'] }, // tilki
+  7: { likes: ['bamboo', 'apple', 'banana'], dislikes: ['fish', 'cheese'] }, // panda
+  8: { likes: ['carrot', 'leaf', 'apple'], dislikes: ['cheese', 'bone'] }, // kanguru
+  9: { likes: ['leaf', 'banana', 'watermelon'], dislikes: ['bone', 'fish'] }, // zürafa
+  10: { likes: ['flower', 'strawberry', 'icecream'], dislikes: ['bone', 'fish'] }, // unicorn
 };
+
+/** Hayvanın en bilinen yiyeceği (civciv tohum, tavşan havuç ...); rehber ve seviye hediyesi bunu verir. */
+export function mainFood(level: number): FoodConfig {
+  return foodFor(TASTES[level].likes[0]);
+}
 
 export type Taste = 'wish' | 'like' | 'okay' | 'dislike';
 
@@ -427,21 +436,21 @@ export function dayNumber(t: number): number {
   return Math.floor((t - d.getTimezoneOffset() * 60_000) / 86_400_000);
 }
 
-/** Hayvanın bugün istediği ikram: sevdiklerinden biri, her gün sıradaki. */
-export function wishFor(level: number, day: number): TreatId {
+/** Hayvanın bugün istediği yiyecek: sevdiklerinden biri, her gün sıradaki. */
+export function wishFor(level: number, day: number): FoodId {
   const likes = TASTES[level].likes;
   return likes[(day + level) % likes.length];
 }
 
-export function tasteOf(level: number, treat: TreatId, day: number): Taste {
-  if (treat === wishFor(level, day)) return 'wish';
-  if (TASTES[level].likes.includes(treat)) return 'like';
-  if (TASTES[level].dislikes.includes(treat)) return 'dislike';
+export function tasteOf(level: number, food: FoodId, day: number): Taste {
+  if (food === wishFor(level, day)) return 'wish';
+  if (TASTES[level].likes.includes(food)) return 'like';
+  if (TASTES[level].dislikes.includes(food)) return 'dislike';
   return 'okay';
 }
 
-/** İkramın mutluluk çubuğuna etkisi (çubuk 0-100). */
-export const TASTE_HAPPINESS: Record<Taste, number> = { wish: 60, like: 30, okay: 15, dislike: -10 };
+/** Yiyeceğin mutluluk çubuğuna etkisi (çubuk 0-100). Sevmediği yiyeceği yemez, çubuk değişmez. */
+export const TASTE_HAPPINESS: Record<Taste, number> = { wish: 60, like: 30, okay: 10, dislike: 0 };
 /** Günün isteği yerine gelince ayrıca kazanılan yıldız puanı. */
 export function xpForWish(level: number): number {
   return 5 + 2 * level;
@@ -455,6 +464,22 @@ export function xpForHappy(level: number): number {
   return 10 + 5 * level;
 }
 
-/** İkram fiyatı: parkın bu kadar saniyelik kazancı (en az TREAT_MIN_PRICE); oyun ilerledikçe pahalanır. */
-export const TREAT_COST_SEC = 30;
-export const TREAT_MIN_PRICE = 20;
+// --- Bakım: yıkama ve alan temizliği ---
+// Hayvanlar zamanla kirlenir (etrafında sinekler 🦟 uçar); kirli hayvanı gören ziyaretçi azalır.
+// Çocuk alan ekranında süngerle ovarak yıkar. Alanlara arada kaka 💩 düşer; dokununca temizlenir
+// ve küçük bir altın ile yıldız puanı gelir. Hiçbiri hayvana zarar vermez.
+
+/** Yıkanan hayvan bu kadar sonra yeniden kirlenir. */
+export const DIRTY_AFTER_SEC = FAST_HUNGER ? 10 * 60 : 3 * 60 * 60;
+/** Kirli hayvanın kazanç çarpanı. */
+export const DIRTY_INCOME = 0.75;
+export const XP_WASH = 3;
+export const WASH_HAPPINESS = 15;
+
+/** Her alana (bu türden hayvan varken) bu aralıkla bir kaka düşer; en fazla MAX_POOP birikir. */
+export const POOP_EVERY_SEC = FAST_HUNGER ? 3 * 60 : 40 * 60;
+export const MAX_POOP = 3;
+export const XP_POOP = 1;
+/** Kaka temizleyince gelen altın: parkın bu kadar saniyelik kazancı (en az POOP_GOLD_MIN). */
+export const POOP_GOLD_SEC = 10;
+export const POOP_GOLD_MIN = 5;

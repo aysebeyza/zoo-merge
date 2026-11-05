@@ -2,7 +2,7 @@
 // Çocuk civcivi, tavşanı ve kediyi tek tek çıkarır; böylece hem kuluçkayı hem birleştirmeyi öğrenir.
 // Sonunda Hayvanlarım'ı açıp üçünü de hediye yemle besler.
 
-import { animalFor, TUTORIAL_ANIMALS } from './config.ts';
+import { animalFor, mainFood, TUTORIAL_ANIMALS } from './config.ts';
 import { canFeed, type GameAction, type GameState } from './state.ts';
 
 /**
@@ -31,7 +31,7 @@ export function tutorialHint(state: GameState, animalsOpen = false): TutorialHin
       .filter((a) => a.level <= TUTORIAL_ANIMALS && canFeed(state, a))
       .sort((a, b) => a.level - b.level)[0];
     if (hungry) {
-      const food = animalFor(hungry.level).food.emoji;
+      const food = mainFood(hungry.level).emoji;
       return { kind: 'tap', target: `feed-${hungry.id}`, text: `${food} ${FEED_TEXT[hungry.level]}` };
     }
     return { kind: 'tap', target: 'animals-close', text: 'Aferin! Acıkınca yine besle 🎉' };
@@ -87,8 +87,8 @@ const PLAYER_ACTIONS = new Set<GameAction['type']>([
   'feedAnimal',
   'buyMissingFood',
   'takeGift',
-  'buyTreat',
-  'giveTreat',
+  'washAnimal',
+  'cleanPoop',
   'petAnimal',
   'collectTip',
 ]);

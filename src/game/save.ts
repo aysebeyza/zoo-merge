@@ -6,7 +6,10 @@ import {
   FASTER_HEN_REFUND_COSTS,
   GRID_SIZE,
   incubatorSlots,
+  FOODS,
   levelForXp,
+  mainFood,
+  type FoodId,
   UPGRADES,
   xpForNewAnimal,
 } from './config.ts';
@@ -46,8 +49,17 @@ export function parseSave(json: string | null): GameState | null {
     eggsBought: _bought,
     nextAutoEggAt: _auto,
     tips: _tips,
+    treats: oldTreats,
+    triedTreats: oldTried,
     ...rest
-  } = saved as GameState & { nextEggColor?: unknown; eggsBought?: unknown; nextAutoEggAt?: unknown; tips?: unknown };
+  } = saved as GameState & {
+    nextEggColor?: unknown;
+    eggsBought?: unknown;
+    nextAutoEggAt?: unknown;
+    tips?: unknown;
+    treats?: Record<string, number>;
+    triedTreats?: Record<number, string[]>;
+  };
   // Sonradan eklenen alanlar eski kayıtta yoksa başlangıç değerleri kullanılır.
   const fresh = createInitialState(saved.now);
   // Yalnızca bugün olan yükseltmeler okunur. Kaldırılan otomatik yemliği, otomatik yumurtayı ve
@@ -69,7 +81,8 @@ export function parseSave(json: string | null): GameState | null {
     // Rehber gelmeden önce başlamış oyunlar rehberi görmez.
     tutorialStep: 'tutorialStep' in saved ? saved.tutorialStep : null,
     upgrades,
-    food: saved.food ?? {},
+    food: migrateFood(saved.food as Record<string, number> | undefined, oldTreats),
+    triedFoods: saved.triedFoods ?? migrateTried(oldTried),
     xp,
     level: typeof saved.level === 'number' ? saved.level : levelForXp(xp),
     // Eski kayıtlarda olmayan hayvan alanları: tokluk ve parka çıkış anı kaydın yapıldığı an, yetenek 0.
@@ -82,6 +95,7 @@ export function parseSave(json: string | null): GameState | null {
       happiness: animal.happiness ?? 0,
       petAt: animal.petAt ?? 0,
       wishDoneDay: animal.wishDoneDay ?? null,
+      washedAt: animal.washedAt ?? saved.now,
     })),
     grid: fitLength(saved.grid.map(migrateEgg), GRID_SIZE),
     incubator: fitLength(
@@ -90,6 +104,32 @@ export function parseSave(json: string | null): GameState | null {
     ),
     giftBox: (saved.giftBox ?? []).map((egg) => migrateEgg(egg)!),
   };
+}
+
+const FOOD_IDS = new Set<string>(FOODS.map((f) => f.id));
+
+/**
+ * Yemler eskiden hayvana göre saklanıyordu (1: tohum, 2: havuç ...); artık ortak yiyecek listesi var.
+ * Eski yem, o hayvanın en bilinen yiyeceği olur. Kısa süre ayrı satılan ikramlardan listede olanlar
+ * yiyecek stoğuna eklenir.
+ */
+function migrateFood(food: Record<string, number> | undefined, treats: Record<string, number> | undefined) {
+  const result: Partial<Record<FoodId, number>> = {};
+  const add = (id: FoodId, n: number) => (result[id] = (result[id] ?? 0) + n);
+  for (const [key, n] of Object.entries(food ?? {})) {
+    if (FOOD_IDS.has(key)) add(key as FoodId, n);
+    else if (Number(key) >= 1 && Number(key) <= 10) add(mainFood(Number(key)).id, n);
+  }
+  for (const [key, n] of Object.entries(treats ?? {})) if (FOOD_IDS.has(key)) add(key as FoodId, n);
+  return result;
+}
+
+function migrateTried(tried: Record<number, string[]> | undefined): Record<number, FoodId[]> {
+  const result: Record<number, FoodId[]> = {};
+  for (const [level, ids] of Object.entries(tried ?? {})) {
+    result[Number(level)] = ids.filter((id): id is FoodId => FOOD_IDS.has(id));
+  }
+  return result;
 }
 
 function migrateEgg(egg: Egg | null): Egg | null {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { animalFor } from '@/game/config';
+import { foodFor } from '@/game/config';
 import { formatNumber } from '@/game/format';
 import type { LevelUp } from '@/game/state';
 
@@ -33,7 +33,7 @@ export function LevelUpModal({ levelUp, onClose }: Props) {
           {levelUp.diamonds > 0 && <Text style={[styles.gift, styles.diamond]}>💎 +{levelUp.diamonds}</Text>}
         </View>
         {levelUp.food.length > 0 && (
-          <Text style={styles.food}>{levelUp.food.map((l) => animalFor(l).food.emoji).join(' ')} +1</Text>
+          <Text style={styles.food}>{levelUp.food.map((f) => foodFor(f).emoji).join(' ')} +1</Text>
         )}
         <Pressable style={styles.button} onPress={onClose}>
           <Text style={styles.buttonText}>Topla!</Text>

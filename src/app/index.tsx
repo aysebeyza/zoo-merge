@@ -190,6 +190,7 @@ export default function GameScreen() {
         gold={state.gold}
         incomeBonus={incomeBonus}
         discovered={state.discovered}
+        poops={state.poops}
         targetRef={targetRef}
         onOpenAnimals={setAnimalsTab}
         onOpenEnclosure={setEnclosure}
@@ -316,11 +317,11 @@ export default function GameScreen() {
         <AnimalsPanel
           state={state}
           initialTab={animalsTab}
-          onFeed={(id) => {
-            dispatch({ type: 'feedAnimal', id });
+          onFeed={(id, food) => {
+            dispatch({ type: 'feedAnimal', id, food });
             haptic('success');
           }}
-          onBuyFood={(level) => dispatch({ type: 'buyFood', level })}
+          onBuyFood={(food) => dispatch({ type: 'buyFood', food })}
           onBuyMissingFood={() => {
             dispatch({ type: 'buyMissingFood' });
             haptic('success');
@@ -343,13 +344,10 @@ export default function GameScreen() {
         <EnclosureView
           state={state}
           level={enclosure}
-          onFeed={(id) => {
-            dispatch({ type: 'feedAnimal', id });
+          onFeed={(id, food, buyFirst) => {
+            if (buyFirst) dispatch({ type: 'buyFood', food });
+            dispatch({ type: 'feedAnimal', id, food });
             haptic('success');
-          }}
-          onBuyFood={() => {
-            setEnclosure(null);
-            setAnimalsTab('food');
           }}
           onUpgradeSkill={(id) => {
             dispatch({ type: 'upgradeSkill', id });
@@ -364,10 +362,13 @@ export default function GameScreen() {
             dispatch({ type: 'petAnimal', id });
             haptic('merge');
           }}
-          onGiveTreat={(id, treat, buyFirst) => {
-            if (buyFirst) dispatch({ type: 'buyTreat', treat });
-            dispatch({ type: 'giveTreat', id, treat });
+          onWash={(id) => {
+            dispatch({ type: 'washAnimal', id });
             haptic('success');
+          }}
+          onCleanPoop={(level) => {
+            dispatch({ type: 'cleanPoop', level });
+            haptic('merge');
           }}
           onClose={() => setEnclosure(null)}
         />

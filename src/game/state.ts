@@ -14,7 +14,20 @@ import {
   ESCAPE_AFTER_EMPTY_SEC,
   FEED_BELOW,
   FIRST_HATCH_SEC,
-  foodPrice,
+  DIRTY_AFTER_SEC,
+  DIRTY_INCOME,
+  FOOD_COST_SEC,
+  FOOD_MIN_PRICE,
+  mainFood,
+  MAX_POOP,
+  POOP_EVERY_SEC,
+  POOP_GOLD_MIN,
+  POOP_GOLD_SEC,
+  WASH_HAPPINESS,
+  wishFor,
+  XP_POOP,
+  XP_WASH,
+  type FoodId,
   TUTORIAL_ANIMALS,
   GRID_SIZE,
   HUNGER_SEC,
@@ -56,12 +69,9 @@ import {
   PET_HAPPINESS,
   TASTE_HAPPINESS,
   tasteOf,
-  TREAT_COST_SEC,
-  TREAT_MIN_PRICE,
   xpForHappy,
   xpForWish,
   type Taste,
-  type TreatId,
 } from './config.ts';
 
 export type Egg = {
@@ -100,6 +110,8 @@ export type ParkAnimal = {
   petAt: number;
   /** Günün isteğinin yerine getirildiği gün (dayNumber); bugün yerine geldiyse istek görünmez. */
   wishDoneDay: number | null;
+  /** En son yıkandığı an; DIRTY_AFTER_SEC sonra kirlenir. */
+  washedAt: number;
 };
 
 /** Bahçenin seviye atlaması ve verilen hediye; ekranda kutlamayla gösterilir. */
@@ -107,8 +119,8 @@ export type LevelUp = {
   level: number;
   gold: number;
   diamonds: number;
-  /** Birer yem hediye edilen hayvanların seviyeleri. */
-  food: number[];
+  /** Birer tane hediye edilen yiyecekler (bulunan hayvanların en bilinen yiyecekleri). */
+  food: FoodId[];
 };
 
 export type GameState = {
@@ -136,16 +148,18 @@ export type GameState = {
   /** Ekranda gösterilecek "... yumurtasına döndü" uyarıları (seviye numaraları). */
   escapedQueue: number[];
   /** Yem stoğu: hayvan seviyesine göre kaç yem var (1 = tohum, 2 = havuç ...). */
-  food: Record<number, number>;
+  food: Partial<Record<FoodId, number>>;
   /**
    * İlk oyun rehberinin adımı: 1-3 o seviyedeki hayvanı çıkarmak (civciv, tavşan, kedi),
    * TUTORIAL_ANIMALS + 1 Hayvanlarım ekranını açmak; rehber bittiyse null.
    */
   tutorialStep: number | null;
-  /** İkram stoğu. */
-  treats: Partial<Record<TreatId, number>>;
-  /** Her hayvanın denenmiş ikramları; çocuk denedikçe sevdiği ve sevmediği ikramlar görünür olur. */
-  triedTreats: Record<number, TreatId[]>;
+  /** Her hayvanın denenmiş yiyecekleri; çocuk denedikçe sevdiği ve sevmediği yiyecekler görünür olur. */
+  triedFoods: Record<number, FoodId[]>;
+  /** Her alandaki (hayvan seviyesine göre) kaka sayısı. */
+  poops: Record<number, number>;
+  /** Her alanın kaka sayacının başladığı an; sıradaki kaka bundan POOP_EVERY_SEC sonra düşer. */
+  poopTimers: Record<number, number>;
   /** Bahçenin yıldız puanı; seviye bundan hesaplanır (levelForXp). */
   xp: number;
   /** Hediyesi verilmiş en son seviye; rehber sürerken kazanılan seviyeler rehber bitince verilir. */
@@ -174,10 +188,17 @@ export type GameAction =
   | { type: 'boostIncubation'; slot: number; fraction: number }
   /** Hayvanın yeteneğini bir seviye geliştirir; süre dolduysa ve altın yetiyorsa. */
   | { type: 'upgradeSkill'; id: number }
-  /** Yem dükkanı: o hayvanın yeminden bir tane alır. */
-  | { type: 'buyFood'; level: number }
-  /** Hayvanı kendi yemiyle tamamen doyurur; stoktan bir yem gider. */
-  | { type: 'feedAnimal'; id: number }
+  /** Dükkândan bir yiyecek alır. */
+  | { type: 'buyFood'; food: FoodId }
+  /**
+   * Hayvanı stoktaki bir yiyecekle tamamen doyurur. Sevmediği yiyeceği yemez (yalnızca denenmiş sayılır);
+   * günün isteğiyse ayrıca yıldız puanı kazanılır.
+   */
+  | { type: 'feedAnimal'; id: number; food: FoodId }
+  /** Kirli hayvanı yıkar. */
+  | { type: 'washAnimal'; id: number }
+  /** O hayvanın alanından bir kaka temizler. */
+  | { type: 'cleanPoop'; level: number }
   /** Yem dükkanı "Eksikleri al": parktaki her hayvana birer yem olacak kadar eksik yemleri alır. */
   | { type: 'buyMissingFood' }
   /** Hediye kutusundaki ilk yumurtayı birleştirme alanına alır. */
@@ -186,10 +207,6 @@ export type GameAction =
   | { type: 'finishTutorial' }
   /** Oyunu baştan başlatır (ebeveyn onayından sonra); rehber de yeniden gösterilir. */
   | { type: 'reset'; now: number }
-  /** İkram dükkanından bir ikram alır. */
-  | { type: 'buyTreat'; treat: TreatId }
-  /** Hayvana stoktan bir ikram verir; günün isteğiyse ayrıca yıldız puanı kazanılır. */
-  | { type: 'giveTreat'; id: number; treat: TreatId }
   /** Hayvanı sever; mutluluk PET_COOLDOWN_SEC'te bir artar. */
   | { type: 'petAnimal'; id: number }
   /** Bahşişli ziyaretçiye, o gitmeden dokunuldu: bahşiş toplanır. */
@@ -219,8 +236,9 @@ export function createInitialState(now: number): GameState {
     escapedQueue: [],
     food: {},
     tutorialStep: 1,
-    treats: {},
-    triedTreats: {},
+    triedFoods: {},
+    poops: {},
+    poopTimers: {},
     xp: 0,
     level: 1,
     levelUps: [],
@@ -229,17 +247,46 @@ export function createInitialState(now: number): GameState {
   };
 }
 
-/** İkram fiyatı: parkın TREAT_COST_SEC saniyelik kazancı, en az TREAT_MIN_PRICE. */
-export function treatPrice(state: GameState): number {
+/** Bir yiyeceğin fiyatı: parkın FOOD_COST_SEC saniyelik kazancı, en az FOOD_MIN_PRICE. */
+export function foodPrice(state: GameState): number {
   const income = parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now);
-  return Math.max(TREAT_MIN_PRICE, Math.round((income * TREAT_COST_SEC) / 10) * 10);
+  return Math.max(FOOD_MIN_PRICE, Math.round((income * FOOD_COST_SEC) / 10) * 10);
 }
 
-/** Hayvan bu ikramı yerse ne der: bugünkü isteği mi (bugün henüz yerine gelmediyse), sever mi, sevmez mi. */
-export function treatTaste(animal: ParkAnimal, treat: TreatId, now: number): Taste {
+/** Hayvan bu yiyeceği yerse ne der: bugünkü isteği mi (bugün henüz yerine gelmediyse), sever mi, sevmez mi. */
+export function foodTaste(animal: ParkAnimal, food: FoodId, now: number): Taste {
   const day = dayNumber(now);
-  const taste = tasteOf(animal.level, treat, day);
+  const taste = tasteOf(animal.level, food, day);
   return taste === 'wish' && animal.wishDoneDay === day ? 'like' : taste;
+}
+
+/** Hayvanın şu an istediği yiyecek: bugünkü isteği bekliyorsa o, yoksa en bilinen yiyeceği. */
+export function wantedFood(animal: ParkAnimal, now: number): FoodId {
+  return wishPending(animal, now) ? wishFor(animal.level, dayNumber(now)) : mainFood(animal.level).id;
+}
+
+/** "Besle" düğmesinin vereceği yiyecek: stokta olanlardan istek, sonra sevdiği, sonra fena değil; yoksa null. */
+export function bestFood(state: GameState, animal: ParkAnimal): FoodId | null {
+  const order: Taste[] = ['wish', 'like', 'okay'];
+  let best: FoodId | null = null;
+  for (const [food, n] of Object.entries(state.food) as [FoodId, number][]) {
+    if (n <= 0) continue;
+    const taste = foodTaste(animal, food, state.now);
+    if (taste === 'dislike') continue;
+    if (best === null || order.indexOf(taste) < order.indexOf(foodTaste(animal, best, state.now))) best = food;
+  }
+  return best;
+}
+
+/** Hayvan kirli mi (t anında). */
+export function isDirty(animal: { washedAt: number }, t: number): boolean {
+  return t - animal.washedAt >= DIRTY_AFTER_SEC * 1000;
+}
+
+/** Kaka temizleyince gelen altın. */
+export function poopGold(state: GameState): number {
+  const income = parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now);
+  return Math.max(POOP_GOLD_MIN, Math.round(income * POOP_GOLD_SEC));
 }
 
 /** Hayvanın bugünkü isteği hâlâ bekliyor mu. */
@@ -300,11 +347,11 @@ function settleLevels(state: GameState): GameState {
       level,
       gold: Math.max(LEVEL_GOLD_MIN * level, Math.round(income * LEVEL_GOLD_INCOME_SEC)),
       diamonds: level % LEVEL_DIAMOND_EVERY === 0 ? LEVEL_DIAMONDS : 0,
-      food: [...state.discovered].sort((a, b) => a - b),
+      food: [...new Set([...state.discovered].sort((a, b) => a - b).map((l) => mainFood(l).id))],
     };
     gold += reward.gold;
     diamonds += reward.diamonds;
-    for (const l of reward.food) food[l] = (food[l] ?? 0) + 1;
+    for (const f of reward.food) food[f] = (food[f] ?? 0) + 1;
     levelUps.push(reward);
   }
   return { ...state, level: to, gold, diamonds, food, levelUps };
@@ -335,9 +382,9 @@ export function fullnessAt(animal: { fedAt: number }, t: number): number {
   return Math.min(1, Math.max(0, 1 - (t - animal.fedAt) / (HUNGER_SEC * 1000)));
 }
 
-/** Stokta bu hayvanın kaç yemi var. */
-export function foodStock(state: GameState, level: number): number {
-  return state.food[level] ?? 0;
+/** Stokta bu yiyecekten kaç tane var. */
+export function foodStock(state: GameState, food: FoodId): number {
+  return state.food[food] ?? 0;
 }
 
 /** Hayvanın acıkacağı an: tokluğu "acıkmış" sınırına iner. Çocuğa "ne zaman beslemeliyim?" diye gösterilir. */
@@ -351,24 +398,29 @@ export function animalCount(state: GameState, level: number): number {
 }
 
 /**
- * Parktaki her hayvana birer yem düşecek kadar eksik yemler ve toplam fiyatı.
- * Örneğin 3 kedi ve 1 balık varsa 2 balık eksiktir.
+ * Parktaki her hayvana istediği yiyecekten birer tane düşecek kadar eksikler ve toplam fiyatı. Bugünkü
+ * isteği bekleyen hayvan için o, diğerleri için en bilinen yiyeceği sayılır.
  */
-export function missingFood(state: GameState): { items: Record<number, number>; cost: number } {
-  const items: Record<number, number> = {};
-  let cost = 0;
-  for (const level of new Set(state.park.map((a) => a.level))) {
-    const missing = animalCount(state, level) - foodStock(state, level);
-    if (missing <= 0) continue;
-    items[level] = missing;
-    cost += missing * foodPrice(level);
+export function missingFood(state: GameState): { items: Partial<Record<FoodId, number>>; cost: number } {
+  const needed: Partial<Record<FoodId, number>> = {};
+  for (const animal of state.park) {
+    const food = wantedFood(animal, state.now);
+    needed[food] = (needed[food] ?? 0) + 1;
   }
-  return { items, cost };
+  const items: Partial<Record<FoodId, number>> = {};
+  let count = 0;
+  for (const [food, n] of Object.entries(needed) as [FoodId, number][]) {
+    const missing = n - foodStock(state, food);
+    if (missing <= 0) continue;
+    items[food] = missing;
+    count += missing;
+  }
+  return { items, cost: count * foodPrice(state) };
 }
 
-/** Hayvan beslenebilir mi: acıkmaya başlamış ve kendi yemi stokta var. */
+/** Hayvan beslenebilir mi: tokluğu dolu değil (FEED_BELOW altında). */
 export function canFeed(state: GameState, animal: ParkAnimal): boolean {
-  return fullnessAt(animal, state.now) < FEED_BELOW && foodStock(state, animal.level) > 0;
+  return fullnessAt(animal, state.now) < FEED_BELOW;
 }
 
 type Earner = { level: number; variant: Variant; skill?: number };
@@ -391,7 +443,8 @@ export function goldPerSecond(animal: Earner, bonus = 1): number {
 function earningPerSecondAt(animal: ParkAnimal, bonus: number, t: number): number {
   const fullness = fullnessAt(animal, t);
   const skillWorks = moodFor(fullness) === 'happy' || moodFor(fullness) === 'hungry';
-  return goldPerSecond(skillWorks ? animal : { ...animal, skill: 0 }, bonus) * hungerMultiplier(fullness);
+  const dirty = isDirty(animal, t) ? DIRTY_INCOME : 1;
+  return goldPerSecond(skillWorks ? animal : { ...animal, skill: 0 }, bonus) * hungerMultiplier(fullness) * dirty;
 }
 
 /** now verilirse hayvanların o anki tokluğu da hesaba katılır. */
@@ -561,38 +614,6 @@ function applyAction(state: GameState, action: GameAction): GameState {
       };
     }
 
-    case 'buyTreat': {
-      const price = treatPrice(state);
-      if (state.gold < price) return state;
-      return {
-        ...state,
-        gold: state.gold - price,
-        treats: { ...state.treats, [action.treat]: (state.treats[action.treat] ?? 0) + 1 },
-      };
-    }
-
-    case 'giveTreat': {
-      const animal = state.park.find((a) => a.id === action.id);
-      const stock = state.treats[action.treat] ?? 0;
-      if (!animal || stock <= 0) return state;
-      const taste = treatTaste(animal, action.treat, state.now);
-      const tried = state.triedTreats[animal.level] ?? [];
-      const next = {
-        ...state,
-        treats: { ...state.treats, [action.treat]: stock - 1 },
-        triedTreats: tried.includes(action.treat)
-          ? state.triedTreats
-          : { ...state.triedTreats, [animal.level]: [...tried, action.treat] },
-      };
-      return addHappiness(
-        next,
-        animal,
-        TASTE_HAPPINESS[taste],
-        taste === 'wish' ? xpForWish(animal.level) : 0,
-        taste === 'wish' ? { wishDoneDay: dayNumber(state.now) } : {},
-      );
-    }
-
     case 'petAnimal': {
       const animal = state.park.find((a) => a.id === action.id);
       if (!animal || state.now - animal.petAt < PET_COOLDOWN_SEC * 1000) return state;
@@ -645,12 +666,12 @@ function applyAction(state: GameState, action: GameAction): GameState {
     }
 
     case 'buyFood': {
-      const price = foodPrice(action.level);
-      if (state.gold < price || !state.discovered.includes(action.level)) return state;
+      const price = foodPrice(state);
+      if (state.gold < price) return state;
       return {
         ...state,
         gold: state.gold - price,
-        food: { ...state.food, [action.level]: foodStock(state, action.level) + 1 },
+        food: { ...state.food, [action.food]: foodStock(state, action.food) + 1 },
       };
     }
 
@@ -658,20 +679,49 @@ function applyAction(state: GameState, action: GameAction): GameState {
       const { items, cost } = missingFood(state);
       if (cost === 0 || state.gold < cost) return state;
       const food = { ...state.food };
-      for (const [level, n] of Object.entries(items)) food[Number(level)] = foodStock(state, Number(level)) + n;
+      for (const [f, n] of Object.entries(items) as [FoodId, number][]) food[f] = foodStock(state, f) + n;
       return { ...state, gold: state.gold - cost, food };
     }
 
     case 'feedAnimal': {
       const animal = state.park.find((a) => a.id === action.id);
-      if (!animal || !canFeed(state, animal)) return state;
+      if (!animal || !canFeed(state, animal) || foodStock(state, action.food) <= 0) return state;
+      const tried = state.triedFoods[animal.level] ?? [];
+      const triedFoods = tried.includes(action.food)
+        ? state.triedFoods
+        : { ...state.triedFoods, [animal.level]: [...tried, action.food] };
+      const taste = foodTaste(animal, action.food, state.now);
+      // Sevmediğini yemez: yiyecek stokta kalır, yalnızca sevmediği öğrenilir.
+      if (taste === 'dislike') return { ...state, triedFoods };
+      const wish = taste === 'wish';
+      return addHappiness(
+        { ...state, triedFoods, food: { ...state.food, [action.food]: foodStock(state, action.food) - 1 } },
+        animal,
+        TASTE_HAPPINESS[taste],
+        XP_FEED + (wish ? xpForWish(animal.level) : 0),
+        { fedAt: state.now, ...(wish ? { wishDoneDay: dayNumber(state.now) } : {}) },
+      );
+    }
+
+    case 'washAnimal': {
+      const animal = state.park.find((a) => a.id === action.id);
+      if (!animal || !isDirty(animal, state.now)) return state;
+      return addHappiness(state, animal, WASH_HAPPINESS, XP_WASH, { washedAt: state.now });
+    }
+
+    case 'cleanPoop': {
+      const count = state.poops[action.level] ?? 0;
+      if (count <= 0) return state;
+      // Kakalar doluyken sayaç durur; yer açılınca baştan başlar.
+      const poopTimers = count >= MAX_POOP ? { ...state.poopTimers, [action.level]: state.now } : state.poopTimers;
       return gainXp(
         {
           ...state,
-          food: { ...state.food, [animal.level]: foodStock(state, animal.level) - 1 },
-          park: state.park.map((a) => (a.id === animal.id ? { ...a, fedAt: state.now } : a)),
+          gold: state.gold + poopGold(state),
+          poops: { ...state.poops, [action.level]: count - 1 },
+          poopTimers,
         },
-        XP_FEED,
+        XP_POOP,
       );
     }
 
@@ -732,7 +782,7 @@ function tick(state: GameState, now: number): GameState {
       const fullness = fullnessAt(animal, t);
       const mood = moodFor(fullness);
       const amount = mood === 'happy' || mood === 'hungry' ? withSkill : withoutSkill;
-      lastAmount = Math.round(amount * hungerMultiplier(fullness));
+      lastAmount = Math.round(amount * hungerMultiplier(fullness) * (isDirty(animal, t) ? DIRTY_INCOME : 1));
       earned += lastAmount;
       t += intervalMs;
     }
@@ -785,6 +835,7 @@ function tick(state: GameState, now: number): GameState {
         happiness: 0,
         petAt: 0,
         wishDoneDay: null,
+        washedAt: now,
       },
     ];
     xpGained += xpForHatch(level);
@@ -808,11 +859,31 @@ function tick(state: GameState, now: number): GameState {
     tipTimerAt = now;
   }
 
+  // Kaka: parkta hayvanı olan her alana aralıkla bir kaka düşer, en fazla MAX_POOP (oyun kapalıyken de).
+  // Rehber sürerken düşmez.
+  const poops = { ...state.poops };
+  const poopTimers = { ...state.poopTimers };
+  const poopEveryMs = POOP_EVERY_SEC * 1000;
+  const levelsInPark = new Set(park.map((a) => a.level));
+  for (let level = 1; level <= MAX_LEVEL; level++) {
+    const count = poops[level] ?? 0;
+    const timer = poopTimers[level] ?? state.now;
+    if (state.tutorialStep !== null || !levelsInPark.has(level) || count >= MAX_POOP) {
+      poopTimers[level] = now;
+      continue;
+    }
+    const dropped = Math.floor((now - timer) / poopEveryMs);
+    poops[level] = Math.min(MAX_POOP, count + dropped);
+    poopTimers[level] = poops[level] >= MAX_POOP ? now : timer + dropped * poopEveryMs;
+  }
+
   const next = advanceTutorial({
     ...state,
     now,
     tipUntil,
     tipTimerAt,
+    poops,
+    poopTimers,
     gold,
     diamonds,
     discovered,
@@ -846,7 +917,10 @@ function advanceTutorial(state: GameState): GameState {
     // Üç hayvan da çıktı: son adımda çocuk onları besleyecek. Tok hayvan beslenemez, o yüzden biraz
     // acıkırlar; her birine birer yem hediye.
     const food = { ...state.food };
-    for (let level = 1; level <= TUTORIAL_ANIMALS; level++) food[level] = foodStock(state, level) + 1;
+    for (let level = 1; level <= TUTORIAL_ANIMALS; level++) {
+      const id = mainFood(level).id;
+      food[id] = foodStock(state, id) + 1;
+    }
     const hungryFedAt = state.now - (1 - HUNGRY_BELOW + 0.05) * HUNGER_SEC * 1000;
     return {
       ...state,
