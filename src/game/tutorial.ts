@@ -87,6 +87,10 @@ const PLAYER_ACTIONS = new Set<GameAction['type']>([
   'feedAnimal',
   'buyMissingFood',
   'takeGift',
+  'buyTreat',
+  'giveTreat',
+  'petAnimal',
+  'collectTip',
 ]);
 
 export function tutorialAllows(state: GameState, action: GameAction): boolean {

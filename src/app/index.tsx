@@ -360,7 +360,15 @@ export default function GameScreen() {
             // Alandaki son hayvan salınınca alan kapanır.
             if (state.park.filter((a) => a.level === enclosure).length <= 1) setEnclosure(null);
           }}
-          onPet={() => haptic('merge')}
+          onPet={(id) => {
+            dispatch({ type: 'petAnimal', id });
+            haptic('merge');
+          }}
+          onGiveTreat={(id, treat, buyFirst) => {
+            if (buyFirst) dispatch({ type: 'buyTreat', treat });
+            dispatch({ type: 'giveTreat', id, treat });
+            haptic('success');
+          }}
           onClose={() => setEnclosure(null)}
         />
       )}

@@ -18,6 +18,9 @@ function animal(id: number, level: number): ParkAnimal {
     fedAt: T0,
     skill: 0,
     parkedAt: T0,
+    happiness: 0,
+    petAt: 0,
+    wishDoneDay: null,
   };
 }
 

@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 
 import type { AnimalsTab } from '@/components/animals-panel';
-import { ANIMALS, MAX_LEVEL, moodFor, xpForLevel, type Mood } from '@/game/config';
+import { ANIMALS, dayNumber, MAX_LEVEL, moodFor, treatFor, wishFor, xpForLevel, type Mood } from '@/game/config';
 import { formatNumber } from '@/game/format';
-import { fullnessAt, skillCost, skillUnlockAt, type ParkAnimal } from '@/game/state';
+import { fullnessAt, skillCost, skillUnlockAt, wishPending, type ParkAnimal } from '@/game/state';
 
 type Props = {
   animals: ParkAnimal[];
@@ -319,6 +319,8 @@ function EnclosureTile({ level, animals, found, now, gold, incomeBonus, onPress 
   );
   const star = animals.some((a) => skillReady(a, now, gold, incomeBonus));
   const shiny = animals.some((a) => a.variant.shiny);
+  // Bugünkü isteği bekleyen hayvan varsa istediği ikramın resmi alanın üstünde görünür.
+  const wish = animals.some((a) => wishPending(a, now)) ? treatFor(wishFor(level, dayNumber(now))) : null;
 
   return (
     <Pressable style={styles.tile} onPress={onPress} disabled={animals.length === 0}>
@@ -336,6 +338,11 @@ function EnclosureTile({ level, animals, found, now, gold, incomeBonus, onPress 
       </View>
       {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
       {star && <Text style={styles.skillBubble}>⭐</Text>}
+      {wish && (
+        <View style={styles.wishBubble} pointerEvents="none">
+          <Text style={styles.wishEmoji}>{wish.emoji}</Text>
+        </View>
+      )}
       {lastDrop && <CoinPop key={lastDrop.lastDropAt} amount={lastDrop.lastDropAmount} />}
       <Text style={styles.label} numberOfLines={1}>
         {found ? config.name : '???'}
@@ -550,6 +557,19 @@ const styles = StyleSheet.create({
     top: -8,
     right: -4,
     fontSize: 15,
+  },
+  wishBubble: {
+    position: 'absolute',
+    top: -9,
+    alignSelf: 'center',
+    paddingHorizontal: 3,
+    borderRadius: 10,
+    backgroundColor: 'white',
+    borderWidth: 1.5,
+    borderColor: '#FFB020',
+  },
+  wishEmoji: {
+    fontSize: 12,
   },
   skillBubble: {
     position: 'absolute',

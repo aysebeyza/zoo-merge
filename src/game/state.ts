@@ -50,6 +50,18 @@ import {
   xpForHatch,
   xpForNewAnimal,
   XP_TIP,
+  dayNumber,
+  HAPPY_MAX,
+  PET_COOLDOWN_SEC,
+  PET_HAPPINESS,
+  TASTE_HAPPINESS,
+  tasteOf,
+  TREAT_COST_SEC,
+  TREAT_MIN_PRICE,
+  xpForHappy,
+  xpForWish,
+  type Taste,
+  type TreatId,
 } from './config.ts';
 
 export type Egg = {
@@ -82,6 +94,12 @@ export type ParkAnimal = {
   skill: number;
   /** Parka çıktığı an; yetenek seviyeleri parkta kalma süresine göre açılır. */
   parkedAt: number;
+  /** Mutluluk çubuğu, 0-HAPPY_MAX; ikram ve sevgiyle dolar, dolunca yıldız puanı verir. */
+  happiness: number;
+  /** En son mutluluk kazandıran sevgi anı (sevgi PET_COOLDOWN_SEC'te bir sayılır). */
+  petAt: number;
+  /** Günün isteğinin yerine getirildiği gün (dayNumber); bugün yerine geldiyse istek görünmez. */
+  wishDoneDay: number | null;
 };
 
 /** Bahçenin seviye atlaması ve verilen hediye; ekranda kutlamayla gösterilir. */
@@ -124,6 +142,10 @@ export type GameState = {
    * TUTORIAL_ANIMALS + 1 Hayvanlarım ekranını açmak; rehber bittiyse null.
    */
   tutorialStep: number | null;
+  /** İkram stoğu. */
+  treats: Partial<Record<TreatId, number>>;
+  /** Her hayvanın denenmiş ikramları; çocuk denedikçe sevdiği ve sevmediği ikramlar görünür olur. */
+  triedTreats: Record<number, TreatId[]>;
   /** Bahçenin yıldız puanı; seviye bundan hesaplanır (levelForXp). */
   xp: number;
   /** Hediyesi verilmiş en son seviye; rehber sürerken kazanılan seviyeler rehber bitince verilir. */
@@ -164,6 +186,12 @@ export type GameAction =
   | { type: 'finishTutorial' }
   /** Oyunu baştan başlatır (ebeveyn onayından sonra); rehber de yeniden gösterilir. */
   | { type: 'reset'; now: number }
+  /** İkram dükkanından bir ikram alır. */
+  | { type: 'buyTreat'; treat: TreatId }
+  /** Hayvana stoktan bir ikram verir; günün isteğiyse ayrıca yıldız puanı kazanılır. */
+  | { type: 'giveTreat'; id: number; treat: TreatId }
+  /** Hayvanı sever; mutluluk PET_COOLDOWN_SEC'te bir artar. */
+  | { type: 'petAnimal'; id: number }
   /** Bahşişli ziyaretçiye, o gitmeden dokunuldu: bahşiş toplanır. */
   | { type: 'collectTip' }
   | { type: 'dismissLevelUp' }
@@ -191,12 +219,50 @@ export function createInitialState(now: number): GameState {
     escapedQueue: [],
     food: {},
     tutorialStep: 1,
+    treats: {},
+    triedTreats: {},
     xp: 0,
     level: 1,
     levelUps: [],
     tipUntil: null,
     tipTimerAt: now,
   };
+}
+
+/** İkram fiyatı: parkın TREAT_COST_SEC saniyelik kazancı, en az TREAT_MIN_PRICE. */
+export function treatPrice(state: GameState): number {
+  const income = parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now);
+  return Math.max(TREAT_MIN_PRICE, Math.round((income * TREAT_COST_SEC) / 10) * 10);
+}
+
+/** Hayvan bu ikramı yerse ne der: bugünkü isteği mi (bugün henüz yerine gelmediyse), sever mi, sevmez mi. */
+export function treatTaste(animal: ParkAnimal, treat: TreatId, now: number): Taste {
+  const day = dayNumber(now);
+  const taste = tasteOf(animal.level, treat, day);
+  return taste === 'wish' && animal.wishDoneDay === day ? 'like' : taste;
+}
+
+/** Hayvanın bugünkü isteği hâlâ bekliyor mu. */
+export function wishPending(animal: ParkAnimal, now: number): boolean {
+  return animal.wishDoneDay !== dayNumber(now);
+}
+
+/** Mutluluğu artırır; çubuk dolarsa yıldız puanı verilir ve çubuk baştan dolmaya başlar. */
+function addHappiness(
+  state: GameState,
+  animal: ParkAnimal,
+  amount: number,
+  extraXp: number,
+  patch: Partial<ParkAnimal>,
+) {
+  let happiness = Math.max(0, animal.happiness + amount);
+  let xp = extraXp;
+  if (happiness >= HAPPY_MAX) {
+    happiness -= HAPPY_MAX;
+    xp += xpForHappy(animal.level);
+  }
+  const park = state.park.map((a) => (a.id === animal.id ? { ...a, ...patch, happiness } : a));
+  return gainXp({ ...state, park }, xp);
 }
 
 /** Bahçenin seviyesi. */
@@ -206,7 +272,10 @@ export function zooLevel(state: Pick<GameState, 'level'>): number {
 
 /** Bir bahşiş kaç altın: parkın TIP_INCOME_SEC saniyelik kazancı, en az TIP_MIN. */
 export function tipAmount(state: GameState): number {
-  return Math.max(TIP_MIN, Math.round(parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now) * TIP_INCOME_SEC));
+  return Math.max(
+    TIP_MIN,
+    Math.round(parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now) * TIP_INCOME_SEC),
+  );
 }
 
 /**
@@ -474,7 +543,7 @@ function applyAction(state: GameState, action: GameAction): GameState {
       const seconds =
         firstHatch || tutorialHatch
           ? FIRST_HATCH_SEC
-        : animalFor(egg.level).incubationSec * incubationFactor(state.upgrades.fasterIncubator);
+          : animalFor(egg.level).incubationSec * incubationFactor(state.upgrades.fasterIncubator);
       const grid = [...state.grid];
       grid[action.from] = null;
       const incubator = [...state.incubator];
@@ -490,6 +559,44 @@ function applyAction(state: GameState, action: GameAction): GameState {
         park: state.park.filter((a) => a.id !== action.id),
         gold: state.gold + releaseValue(animal, stateIncomeBonus(state)),
       };
+    }
+
+    case 'buyTreat': {
+      const price = treatPrice(state);
+      if (state.gold < price) return state;
+      return {
+        ...state,
+        gold: state.gold - price,
+        treats: { ...state.treats, [action.treat]: (state.treats[action.treat] ?? 0) + 1 },
+      };
+    }
+
+    case 'giveTreat': {
+      const animal = state.park.find((a) => a.id === action.id);
+      const stock = state.treats[action.treat] ?? 0;
+      if (!animal || stock <= 0) return state;
+      const taste = treatTaste(animal, action.treat, state.now);
+      const tried = state.triedTreats[animal.level] ?? [];
+      const next = {
+        ...state,
+        treats: { ...state.treats, [action.treat]: stock - 1 },
+        triedTreats: tried.includes(action.treat)
+          ? state.triedTreats
+          : { ...state.triedTreats, [animal.level]: [...tried, action.treat] },
+      };
+      return addHappiness(
+        next,
+        animal,
+        TASTE_HAPPINESS[taste],
+        taste === 'wish' ? xpForWish(animal.level) : 0,
+        taste === 'wish' ? { wishDoneDay: dayNumber(state.now) } : {},
+      );
+    }
+
+    case 'petAnimal': {
+      const animal = state.park.find((a) => a.id === action.id);
+      if (!animal || state.now - animal.petAt < PET_COOLDOWN_SEC * 1000) return state;
+      return addHappiness(state, animal, PET_HAPPINESS, 0, { petAt: state.now });
     }
 
     case 'collectTip': {
@@ -675,6 +782,9 @@ function tick(state: GameState, now: number): GameState {
         fedAt: now,
         skill,
         parkedAt: now,
+        happiness: 0,
+        petAt: 0,
+        wishDoneDay: null,
       },
     ];
     xpGained += xpForHatch(level);

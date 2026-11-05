@@ -24,12 +24,12 @@ export const ANIMALS: readonly AnimalConfig[] = [
   { level: 2, name: 'Tavşan', emoji: '🐰', dropEverySec: 8, dropAmount: 2, incubationSec: 30, eggColor: '#FF9EC4', food: { emoji: '🥕', name: 'Havuç' } },
   { level: 3, name: 'Kedi', emoji: '🐱', dropEverySec: 6, dropAmount: 3, incubationSec: 90, eggColor: '#FF9F45', food: { emoji: '🐟', name: 'Balık' } },
   { level: 4, name: 'Köpek', emoji: '🐶', dropEverySec: 6, dropAmount: 7, incubationSec: 4 * 60, eggColor: '#C68B59', food: { emoji: '🦴', name: 'Kemik' } },
-  { level: 5, name: 'Panda', emoji: '🐼', dropEverySec: 6, dropAmount: 16, incubationSec: 8 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
-  { level: 6, name: 'Penguen', emoji: '🐧', dropEverySec: 6, dropAmount: 36, incubationSec: 15 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
-  { level: 7, name: 'Zürafa', emoji: '🦒', dropEverySec: 8, dropAmount: 108, incubationSec: 30 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
-  { level: 8, name: 'Fil', emoji: '🐘', dropEverySec: 8, dropAmount: 240, incubationSec: 60 * 60, eggColor: '#B983FF', food: { emoji: '🍌', name: 'Muz' } },
-  { level: 9, name: 'Aslan', emoji: '🦁', dropEverySec: 8, dropAmount: 540, incubationSec: 2 * 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥩', name: 'Et' } },
-  { level: 10, name: 'Ejderha', emoji: '🐉', dropEverySec: 10, dropAmount: 1500, incubationSec: 4 * 60 * 60, eggColor: '#2EC4B6', food: { emoji: '🌶️', name: 'Biber' } },
+  { level: 5, name: 'Penguen', emoji: '🐧', dropEverySec: 6, dropAmount: 16, incubationSec: 8 * 60, eggColor: '#4D96FF', food: { emoji: '🦐', name: 'Karides' } },
+  { level: 6, name: 'Tilki', emoji: '🦊', dropEverySec: 6, dropAmount: 36, incubationSec: 15 * 60, eggColor: '#E8572A', food: { emoji: '🍇', name: 'Üzüm' } },
+  { level: 7, name: 'Panda', emoji: '🐼', dropEverySec: 8, dropAmount: 108, incubationSec: 30 * 60, eggColor: '#E4E4E4', food: { emoji: '🎋', name: 'Bambu' } },
+  { level: 8, name: 'Kanguru', emoji: '🦘', dropEverySec: 8, dropAmount: 240, incubationSec: 60 * 60, eggColor: '#FF6B6B', food: { emoji: '🥬', name: 'Marul' } },
+  { level: 9, name: 'Zürafa', emoji: '🦒', dropEverySec: 8, dropAmount: 540, incubationSec: 2 * 60 * 60, eggColor: '#6BCB77', food: { emoji: '🍃', name: 'Yaprak' } },
+  { level: 10, name: 'Unicorn', emoji: '🦄', dropEverySec: 10, dropAmount: 1500, incubationSec: 4 * 60 * 60, eggColor: '#B983FF', food: { emoji: '🌸', name: 'Çiçek' } },
 ];
 
 /** Alınan ya da bedava gelen yumurtanın nadir parlak (✨) olma şansı. Öneri; testlerde ayarlanacak. */
@@ -63,7 +63,7 @@ export const FIRST_HATCH_SEC = 3;
  */
 export const TUTORIAL_ANIMALS = 3;
 /**
- * Yeni bir hayvan bulununca verilen elmas: her hayvan bir öncekinden 1 fazla (civciv 1, ejderha 10;
+ * Yeni bir hayvan bulununca verilen elmas: her hayvan bir öncekinden 1 fazla (civciv 1, unicorn 10;
  * bütün oyunda 55). Elmas az kalsın diye başta çok az; elmaslı yükseltmelerin çoğu parayla alınır.
  */
 export function diamondsForNewAnimal(level: number): number {
@@ -72,7 +72,7 @@ export function diamondsForNewAnimal(level: number): number {
 
 // --- Yumurta sepeti ---
 // Yumurtalar altınla alınmaz: Tavuk Anne belli aralıklarla sepete yumurta bırakır (oyun kapalıyken de),
-// sepet dolunca durur. Böylece ilerleme altına değil zamana bağlıdır; günde 3 x 20 dk oynayan çocuk ejderhayı
+// sepet dolunca durur. Böylece ilerleme altına değil zamana bağlıdır; günde 3 x 20 dk oynayan çocuk unicornu
 // yaklaşık 7. gün çıkarır.
 // Sayılar simülasyonla ayarlandı (npm run sim).
 
@@ -220,7 +220,7 @@ export function upgradeCost(id: UpgradeId, currentLevel: number): number | null 
 export type SkillConfig = {
   name: string;
   description: string;
-  /** 1., 2. ve 3. seviyenin altın kazancına eklediği oran. Büyük hayvanlarda küçük, ejderha aşırı güçlenmesin. */
+  /** 1., 2. ve 3. seviyenin altın kazancına eklediği oran. Büyük hayvanlarda küçük, unicorn aşırı güçlenmesin. */
   bonuses: readonly [number, number, number];
 };
 
@@ -228,7 +228,7 @@ const SKILLS: readonly SkillConfig[] = [
   { name: 'Sevimlilik', description: 'Ziyaretçi daha çok altın bırakır', bonuses: [0.3, 0.6, 1] },
   { name: 'Gösteri', description: 'Daha çok ziyaretçi gelir', bonuses: [0.25, 0.5, 0.75] },
   { name: 'Görkem', description: 'Ziyaretçiler daha uzun kalır', bonuses: [0.2, 0.4, 0.6] },
-  { name: 'Kral', description: 'Herkes onu görmeye gelir', bonuses: [0.15, 0.3, 0.45] },
+  { name: 'Sihir', description: 'Herkes onu görmeye gelir', bonuses: [0.15, 0.3, 0.45] },
 ];
 
 export const MAX_SKILL = 3;
@@ -237,7 +237,7 @@ export const SKILL_UNLOCK_SEC = [5 * 60, 30 * 60, 2 * 60 * 60] as const;
 /** Yetenek seviyesinin bedeli: hayvanın bu kadar saniyelik kazancı. */
 export const SKILL_COST_SEC = [2 * 60, 10 * 60, 30 * 60] as const;
 
-/** Civciv-kedi, köpek-penguen, zürafa-aslan ve ejderha ayrı yetenek kullanır. */
+/** Civciv-kedi, köpek-tilki, panda-zürafa ve unicorn ayrı yetenek kullanır. */
 export function skillFor(level: number): SkillConfig {
   if (level <= 3) return SKILLS[0];
   if (level <= 6) return SKILLS[1];
@@ -367,3 +367,94 @@ export const LEVEL_GOLD_MIN = 100;
 /** Her LEVEL_DIAMOND_EVERY seviyede bir küçük elmas hediyesi; elmas az kalsın. */
 export const LEVEL_DIAMOND_EVERY = 5;
 export const LEVEL_DIAMONDS = 2;
+
+// --- İkramlar, günün isteği ve mutluluk ---
+// Yemden ayrı, ikram dükkanından alınan yiyecekler. Her hayvanın sevdiği ve sevmediği ikramlar var;
+// çocuk denedikçe öğrenir. Her gün her hayvan sevdiklerinden birini ister (başında resmi çıkar).
+// İkram ve sevgi mutluluk çubuğunu doldurur; çubuk dolunca bahçe yıldız puanı kazanır.
+
+export type TreatId =
+  | 'apple'
+  | 'strawberry'
+  | 'banana'
+  | 'watermelon'
+  | 'cheese'
+  | 'peanut'
+  | 'honey'
+  | 'cookie'
+  | 'icecream'
+  | 'lemon';
+
+export type TreatConfig = { id: TreatId; emoji: string; name: string };
+
+export const TREATS: readonly TreatConfig[] = [
+  { id: 'apple', emoji: '🍎', name: 'Elma' },
+  { id: 'strawberry', emoji: '🍓', name: 'Çilek' },
+  { id: 'banana', emoji: '🍌', name: 'Muz' },
+  { id: 'watermelon', emoji: '🍉', name: 'Karpuz' },
+  { id: 'cheese', emoji: '🧀', name: 'Peynir' },
+  { id: 'peanut', emoji: '🥜', name: 'Fıstık' },
+  { id: 'honey', emoji: '🍯', name: 'Bal' },
+  { id: 'cookie', emoji: '🍪', name: 'Kurabiye' },
+  { id: 'icecream', emoji: '🍦', name: 'Dondurma' },
+  { id: 'lemon', emoji: '🍋', name: 'Limon' },
+];
+
+export function treatFor(id: TreatId): TreatConfig {
+  return TREATS.find((t) => t.id === id)!;
+}
+
+/** Her hayvanın sevdiği 3 ve sevmediği 1-2 ikram; listede olmayanlar ona göre "fena değil". */
+// prettier-ignore
+export const TASTES: Record<number, { likes: TreatId[]; dislikes: TreatId[] }> = {
+  1: { likes: ['strawberry', 'watermelon', 'cookie'], dislikes: ['cheese', 'lemon'] }, // civciv
+  2: { likes: ['apple', 'strawberry', 'watermelon'], dislikes: ['cheese', 'honey'] }, // tavşan
+  3: { likes: ['cheese', 'icecream', 'cookie'], dislikes: ['lemon', 'banana'] }, // kedi
+  4: { likes: ['cookie', 'cheese', 'peanut'], dislikes: ['lemon'] }, // köpek
+  5: { likes: ['icecream', 'watermelon', 'cheese'], dislikes: ['banana', 'honey'] }, // penguen
+  6: { likes: ['strawberry', 'honey', 'apple'], dislikes: ['lemon'] }, // tilki
+  7: { likes: ['apple', 'honey', 'banana'], dislikes: ['cheese'] }, // panda
+  8: { likes: ['apple', 'peanut', 'watermelon'], dislikes: ['icecream'] }, // kanguru
+  9: { likes: ['apple', 'banana', 'watermelon'], dislikes: ['cookie', 'lemon'] }, // zürafa
+  10: { likes: ['strawberry', 'icecream', 'cookie'], dislikes: ['lemon', 'cheese'] }, // unicorn
+};
+
+export type Taste = 'wish' | 'like' | 'okay' | 'dislike';
+
+/** Günün numarası (telefonun saatine göre, gece yarısı değişir). */
+export function dayNumber(t: number): number {
+  const d = new Date(t);
+  return Math.floor((t - d.getTimezoneOffset() * 60_000) / 86_400_000);
+}
+
+/** Hayvanın bugün istediği ikram: sevdiklerinden biri, her gün sıradaki. */
+export function wishFor(level: number, day: number): TreatId {
+  const likes = TASTES[level].likes;
+  return likes[(day + level) % likes.length];
+}
+
+export function tasteOf(level: number, treat: TreatId, day: number): Taste {
+  if (treat === wishFor(level, day)) return 'wish';
+  if (TASTES[level].likes.includes(treat)) return 'like';
+  if (TASTES[level].dislikes.includes(treat)) return 'dislike';
+  return 'okay';
+}
+
+/** İkramın mutluluk çubuğuna etkisi (çubuk 0-100). */
+export const TASTE_HAPPINESS: Record<Taste, number> = { wish: 60, like: 30, okay: 15, dislike: -10 };
+/** Günün isteği yerine gelince ayrıca kazanılan yıldız puanı. */
+export function xpForWish(level: number): number {
+  return 5 + 2 * level;
+}
+/** Sevmek mutluluğu biraz artırır; aynı hayvan için en sık bu aralıkla sayılır (kalpler hep uçar). */
+export const PET_HAPPINESS = 10;
+export const PET_COOLDOWN_SEC = 60;
+/** Mutluluk çubuğu dolunca kazanılan yıldız puanı; çubuk boşalıp yeniden dolmaya başlar. */
+export const HAPPY_MAX = 100;
+export function xpForHappy(level: number): number {
+  return 10 + 5 * level;
+}
+
+/** İkram fiyatı: parkın bu kadar saniyelik kazancı (en az TREAT_MIN_PRICE); oyun ilerledikçe pahalanır. */
+export const TREAT_COST_SEC = 30;
+export const TREAT_MIN_PRICE = 20;

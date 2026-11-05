@@ -79,6 +79,9 @@ export function parseSave(json: string | null): GameState | null {
       fedAt: animal.fedAt ?? saved.now,
       skill: animal.skill ?? 0,
       parkedAt: animal.parkedAt ?? saved.now,
+      happiness: animal.happiness ?? 0,
+      petAt: animal.petAt ?? 0,
+      wishDoneDay: animal.wishDoneDay ?? null,
     })),
     grid: fitLength(saved.grid.map(migrateEgg), GRID_SIZE),
     incubator: fitLength(

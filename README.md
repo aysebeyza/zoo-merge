@@ -38,16 +38,19 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 
 ## Şu an oyunda olanlar
 
+- 10 hayvan: civciv, tavşan, kedi, köpek, penguen, tilki, panda, kanguru, zürafa, unicorn.
 - 4x3 birleştirme alanı, sürükle-bırak ile birleştirme. Hayvanlar sırayla bulunur: birleştirmeyle en fazla bir sonraki bulunmamış hayvanın yumurtası yapılabilir (köpek çıkmadan panda yumurtası olmaz, "🐶 Önce bir köpek çıkar!" yazar).
 - Her hayvanın yumurtası hep aynı renk (civciv sarı, kedi turuncu ...); nadir parlak (✨) yumurta %50 fazla kazandırır, birleşince parlaklık korunur
 - 2 yuvalı kuluçka makinesi
 - Hayvanat bahçesi: her hayvanın kendi alanı var (10 alan, altında adı yazar; bulunmamış hayvanın alanında "?" durur). Alanda o türden kaç hayvan olduğu (×3), acıkan olup olmadığı ve düşen altın görünür. Alana dokununca hayvan büyük görünür; aynı türden birden çok hayvan varsa ◀ ▶ oklarla gezilir. Orada besle, ❤️ sev (hayvan zıplar, kalpler uçar), yetenek geliştir, doğaya sal.
+- İkramlar ve günün isteği: yemden ayrı 10 ikram var (elma, çilek, muz, karpuz, peynir, fıstık, bal, kurabiye, dondurma, limon). Her hayvanın sevdiği 3 ve sevmediği 1-2 ikramı var (`TASTES`, `src/game/config.ts`); çocuk denedikçe tepside ❤️ / 🙂 / 🤢 ile görünür. Her gün her hayvan sevdiklerinden birini ister: bahçede alanın üstünde ve alan ekranının sol üstünde resmi çıkar. İstenen ikram verilince hayvan 😍 yapar ve yıldız puanı gelir. İkram fiyatı parkın 30 saniyelik kazancı kadar.
+- Mutluluk çubuğu (💖): ikramlar (istek +60, sevdiği +30, fena değil +15, sevmediği −10) ve sevgi (dakikada bir +10) doldurur; çubuk dolunca bahçe yıldız puanı kazanır ve çubuk baştan dolar.
 - Ziyaretçiler: iki sıra alanın arasındaki yolun bir ucundan girip öbür ucundan çıkarlar (hayvan çoğaldıkça ve "Daha çok ziyaretçi" alındıkça artar, en fazla 6). 3 dakikada bir başında 💰 olan bir ziyaretçi gelir ve yolu 15 saniyede geçer; çocuk o gitmeden dokunursa parkın 1 dakikalık kazancı kadar bahşiş gelir, yetişemezse bahşiş de onunla gider. Oyun kapalıyken bahşiş birikmez.
 - Bahçe seviyesi (⭐): yeni hayvan bulmak, hayvan çıkarmak, beslemek ve bahşiş toplamak yıldız puanı verir. Seviye atlayınca "Bahçen büyüdü!" kutlaması ve hediye: altın, bulunan her hayvana bir yem, her 5 seviyede 2 💎. Rehberde kazanılan seviyelerin hediyesi rehber bitince gelir. Simülasyonda 1. gün 5., 3. gün 7., 8. gün 10. seviye.
-- "Yeni hayvan!" kutlaması ve elmas ödülü: her yeni hayvan bir öncekinden 1 elmas fazla verir (civciv 1, tavşan 2 ... ejderha 10; bütün oyunda 55 elmas). Elmaslı yükseltmeler toplam 250 elmas; elmas bilerek az, gerisi ileride parayla alınacak.
+- "Yeni hayvan!" kutlaması ve elmas ödülü: her yeni hayvan bir öncekinden 1 elmas fazla verir (civciv 1, tavşan 2 ... unicorn 10; bütün oyunda 55 elmas). Elmaslı yükseltmeler toplam 250 elmas; elmas bilerek az, gerisi ileride parayla alınacak.
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
-- Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 5 dakikada bir sepete yumurta bırakır (oyun kapalıyken de), sepet 20 yumurta alır ve dolu başlar; Büyük sepet her seviyede 10 artırır (en fazla 60). Günde 3 × 20 dk oynayan çocuk ejderhayı 8. gün çıkarır (`npm run sim`, her günün kazancını ve alınan yükseltmeleri de yazar).
+- Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 5 dakikada bir sepete yumurta bırakır (oyun kapalıyken de), sepet 20 yumurta alır ve dolu başlar; Büyük sepet her seviyede 10 artırır (en fazla 60). Günde 3 × 20 dk oynayan çocuk unicornu 8. gün çıkarır (`npm run sim`, her günün kazancını ve alınan yükseltmeleri de yazar).
 - Altın kazancı dokümandaki tablonun yaklaşık 10'da 1'i (oyuncular bir günde 20 milyona ulaşıyordu).
 - İlk oyun rehberi: 👆 el çocuğa civciv, tavşan ve kediyi tek tek çıkartır, sonra Hayvanlarım'ı açtırıp üçünü hediye yemle (🌾🥕🐟) besletir ve "Aferin!" der; besleme öğretilsin diye bu üç hayvan rehberin sonunda biraz acıkır. Rehber sırasında bu üç hayvanın kuluçkası 3 saniye. Rehberde ekranın geri kalanı koyulaşır ve yalnızca elin gösterdiği hamle işe yarar (yanlış yere sürüklenen yumurta geri döner).
 - Oyunu baştan başlatma: Yükselt panelinin en altında, ebeveyn kapısının (çarpma sorusu) arkasında.

@@ -1,7 +1,26 @@
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { animalFor, FULLNESS_COLOR, MAX_SKILL, moodFor, skillFor } from '@/game/config';
+import {
+  animalFor,
+  dayNumber,
+  FULLNESS_COLOR,
+  HAPPY_MAX,
+  MAX_SKILL,
+  moodFor,
+  PET_COOLDOWN_SEC,
+  PET_HAPPINESS,
+  skillFor,
+  TASTE_HAPPINESS,
+  TASTES,
+  treatFor,
+  TREATS,
+  wishFor,
+  xpForHappy,
+  xpForWish,
+  type Taste,
+  type TreatId,
+} from '@/game/config';
 import { formatNumber, formatWait } from '@/game/format';
 import {
   animalIncomePerSecond,
@@ -13,6 +32,9 @@ import {
   skillCost,
   skillUnlockAt,
   stateIncomeBonus,
+  treatPrice,
+  treatTaste,
+  wishPending,
   type GameState,
   type ParkAnimal,
 } from '@/game/state';
@@ -26,18 +48,40 @@ type Props = {
   onBuyFood: () => void;
   onUpgradeSkill: (id: number) => void;
   onRelease: (id: number) => void;
-  /** Sevince telefon hafifçe titrer. */
-  onPet: () => void;
+  /** Sevgi: mutluluk dakikada bir artar, kalpler hep uçar. */
+  onPet: (id: number) => void;
+  /** İkram verir; stokta yoksa önce bir tane alınır. */
+  onGiveTreat: (id: number, treat: TreatId, buyFirst: boolean) => void;
   onClose: () => void;
 };
 
 const HEART_COUNT = 5;
 
+/** Hayvanın ikrama tepkisi: yüzünde çıkan işaret ve altta yazan söz. */
+const REACTION: Record<Taste, { face: string; text: string }> = {
+  wish: { face: '😍', text: 'Tam da bunu istiyordum!' },
+  like: { face: '😋', text: 'Bayıldım!' },
+  okay: { face: '🙂', text: 'Fena değil.' },
+  dislike: { face: '🤢', text: 'Hiç sevmedim!' },
+};
+
+type Reaction = { key: number; taste: Taste; xp: number };
+
 /**
  * Bir hayvanın alanı: ortada tek bir büyük hayvan. Bu türden birden çok hayvan varsa oklarla
  * sırayla gezilir. Hayvan beslenir, sevilir, yeteneği geliştirilir ya da doğaya salınır.
  */
-export function EnclosureView({ state, level, onFeed, onBuyFood, onUpgradeSkill, onRelease, onPet, onClose }: Props) {
+export function EnclosureView({
+  state,
+  level,
+  onFeed,
+  onBuyFood,
+  onUpgradeSkill,
+  onRelease,
+  onPet,
+  onGiveTreat,
+  onClose,
+}: Props) {
   const animals = state.park.filter((a) => a.level === level);
   // İlk açılışta en aç hayvan gösterilir: çocuk önce onu beslesin.
   const [index, setIndex] = useState(() => {
@@ -48,16 +92,34 @@ export function EnclosureView({ state, level, onFeed, onBuyFood, onUpgradeSkill,
     return hungriest;
   });
   const [petCount, setPetCount] = useState(0);
+  const [reaction, setReaction] = useState<Reaction | null>(null);
+  const [trayOpen, setTrayOpen] = useState(false);
   const config = animalFor(level);
 
   if (animals.length === 0) return null;
   // Salınan hayvan listeden çıkınca sıra kaymasın.
   const current = Math.min(index, animals.length - 1);
   const animal = animals[current];
-  const go = (step: number) => setIndex((current + step + animals.length) % animals.length);
+  const go = (step: number) => {
+    setReaction(null);
+    setIndex((current + step + animals.length) % animals.length);
+  };
   const pet = () => {
     setPetCount((c) => c + 1);
-    onPet();
+    // Sevgi mutluluğu dakikada bir artırır; çubuk dolacaksa yıldızı göster.
+    if (state.now - animal.petAt >= PET_COOLDOWN_SEC * 1000 && animal.happiness + PET_HAPPINESS >= HAPPY_MAX) {
+      setReaction({ key: Date.now(), taste: 'like', xp: xpForHappy(animal.level) });
+    }
+    onPet(animal.id);
+  };
+  const giveTreat = (treat: TreatId, buyFirst: boolean) => {
+    const taste = treatTaste(animal, treat, state.now);
+    const full = animal.happiness + TASTE_HAPPINESS[taste] >= HAPPY_MAX;
+    const xp = (taste === 'wish' ? xpForWish(animal.level) : 0) + (full ? xpForHappy(animal.level) : 0);
+    setReaction({ key: Date.now(), taste, xp });
+    if (taste !== 'dislike') setPetCount((c) => c + 1);
+    onGiveTreat(animal.id, treat, buyFirst);
+    setTrayOpen(false);
   };
 
   return (
@@ -75,7 +137,7 @@ export function EnclosureView({ state, level, onFeed, onBuyFood, onUpgradeSkill,
 
         <View style={styles.stage}>
           <Arrow direction="left" visible={animals.length > 1} onPress={() => go(-1)} />
-          <Habitat key={animal.id} animal={animal} state={state} petCount={petCount} onPet={pet} />
+          <Habitat key={animal.id} animal={animal} state={state} petCount={petCount} reaction={reaction} onPet={pet} />
           <Arrow direction="right" visible={animals.length > 1} onPress={() => go(1)} />
         </View>
 
@@ -87,21 +149,34 @@ export function EnclosureView({ state, level, onFeed, onBuyFood, onUpgradeSkill,
           </View>
         )}
 
-        <AnimalInfo
-          animal={animal}
-          state={state}
-          onFeed={() => onFeed(animal.id)}
-          onBuyFood={onBuyFood}
-          onPet={pet}
-          onUpgradeSkill={() => onUpgradeSkill(animal.id)}
-          onRelease={() => onRelease(animal.id)}
-        />
+        {trayOpen ? (
+          <TreatTray animal={animal} state={state} onGive={giveTreat} onClose={() => setTrayOpen(false)} />
+        ) : (
+          <AnimalInfo
+            animal={animal}
+            state={state}
+            onFeed={() => onFeed(animal.id)}
+            onBuyFood={onBuyFood}
+            onPet={pet}
+            onOpenTreats={() => setTrayOpen(true)}
+            onUpgradeSkill={() => onUpgradeSkill(animal.id)}
+            onRelease={() => onRelease(animal.id)}
+          />
+        )}
       </View>
     </View>
   );
 }
 
-function Arrow({ direction, visible, onPress }: { direction: 'left' | 'right'; visible: boolean; onPress: () => void }) {
+function Arrow({
+  direction,
+  visible,
+  onPress,
+}: {
+  direction: 'left' | 'right';
+  visible: boolean;
+  onPress: () => void;
+}) {
   // Tek hayvan varken ok görünmez ama yerini korur; alan ortada kalsın.
   return (
     <Pressable style={[styles.arrow, !visible && styles.hidden]} disabled={!visible} onPress={onPress} hitSlop={8}>
@@ -115,16 +190,36 @@ type HabitatProps = {
   state: GameState;
   /** Kaç kez sevildi; her sevgide kalpler uçar. */
   petCount: number;
+  /** Son ikrama tepkisi; birkaç saniye görünür. */
+  reaction: Reaction | null;
   onPet: () => void;
 };
 
 /** Alanın içi: büyük hayvan. Dokununca sevilir, zıplar ve kalpler çıkar. */
-function Habitat({ animal, state, petCount, onPet }: HabitatProps) {
+function Habitat({ animal, state, petCount, reaction, onPet }: HabitatProps) {
   const config = animalFor(animal.level);
   const mood = moodFor(fullnessAt(animal, state.now));
   const sad = mood === 'sad' || mood === 'leaving';
   const [bob] = useState(() => new Animated.Value(0));
   const [jump] = useState(() => new Animated.Value(0));
+  const [shake] = useState(() => new Animated.Value(0));
+  // Tepki birkaç saniye sonra kaybolur: süresi dolan tepkinin anahtarı saklanır.
+  const [expiredKey, setExpiredKey] = useState<number | null>(null);
+  const shownReaction = reaction && reaction.key !== expiredKey ? reaction : null;
+  const wish = wishPending(animal, state.now) ? treatFor(wishFor(animal.level, dayNumber(state.now))) : null;
+
+  // Tepki birkaç saniye görünür; sevmediği ikramda hayvan başını sallar.
+  useEffect(() => {
+    if (!reaction) return;
+    if (reaction.taste === 'dislike') {
+      shake.setValue(0);
+      Animated.sequence(
+        [1, -1, 1, -1, 0].map((v) => Animated.timing(shake, { toValue: v, duration: 90, useNativeDriver: true })),
+      ).start();
+    }
+    const timer = setTimeout(() => setExpiredKey(reaction.key), 2500);
+    return () => clearTimeout(timer);
+  }, [reaction, shake]);
 
   // Mutlu hayvan durduğu yerde hafifçe sallanır; üzgün hayvan oturur.
   useEffect(() => {
@@ -155,7 +250,7 @@ function Habitat({ animal, state, petCount, onPet }: HabitatProps) {
 
   return (
     <Pressable style={styles.habitat} onPress={onPet}>
-      <Text style={[styles.decoration, { top: 10, left: 10 }]}>🌳</Text>
+      <Text style={[styles.decoration, { top: 10, right: 10 }]}>🌳</Text>
       <Text style={[styles.decoration, { bottom: 10, right: 12 }]}>🌼</Text>
       <Text style={[styles.decoration, { bottom: 14, left: 16, fontSize: 18 }]}>🌷</Text>
       {animal.lastDropAt !== null && <CoinPop key={animal.lastDropAt} amount={animal.lastDropAmount} />}
@@ -166,14 +261,30 @@ function Habitat({ animal, state, petCount, onPet }: HabitatProps) {
             { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
             { translateY: jump.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
             { scale: jump.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+            { translateX: shake.interpolate({ inputRange: [-1, 1], outputRange: [-10, 10] }) },
           ],
         }}>
-        {bubble && <Text style={styles.moodBubble}>{bubble}</Text>}
+        {shownReaction ? (
+          <Text style={styles.moodBubble}>{REACTION[shownReaction.taste].face}</Text>
+        ) : (
+          bubble && <Text style={styles.moodBubble}>{bubble}</Text>
+        )}
         <Text style={[styles.bigEmoji, mood === 'leaving' && { opacity: 0.6 }]}>{config.emoji}</Text>
         {animal.variant.shiny && <Text style={styles.shiny}>✨</Text>}
       </Animated.View>
-      {petCount > 0 &&
-        Array.from({ length: HEART_COUNT }, (_, i) => <Heart key={`${petCount}-${i}`} index={i} />)}
+      {/* Günün isteği: hayvan bugün ne yemek istiyor. */}
+      {wish && !shownReaction && (
+        <View style={styles.wish}>
+          <Text style={styles.wishEmoji}>{wish.emoji}</Text>
+        </View>
+      )}
+      {shownReaction && (
+        <View style={styles.reaction}>
+          <Text style={styles.reactionText}>{REACTION[shownReaction.taste].text}</Text>
+          {shownReaction.xp > 0 && <Text style={styles.reactionXp}>+{shownReaction.xp} ⭐</Text>}
+        </View>
+      )}
+      {petCount > 0 && Array.from({ length: HEART_COUNT }, (_, i) => <Heart key={`${petCount}-${i}`} index={i} />)}
     </Pressable>
   );
 }
@@ -239,12 +350,13 @@ type InfoProps = {
   onFeed: () => void;
   onBuyFood: () => void;
   onPet: () => void;
+  onOpenTreats: () => void;
   onUpgradeSkill: () => void;
   onRelease: () => void;
 };
 
 /** Hayvanın kazancı, tokluğu, yeteneği ve düğmeleri. */
-function AnimalInfo({ animal, state, onFeed, onBuyFood, onPet, onUpgradeSkill, onRelease }: InfoProps) {
+function AnimalInfo({ animal, state, onFeed, onBuyFood, onPet, onOpenTreats, onUpgradeSkill, onRelease }: InfoProps) {
   const config = animalFor(animal.level);
   const bonus = stateIncomeBonus(state);
   const fullness = fullnessAt(animal, state.now);
@@ -269,7 +381,23 @@ function AnimalInfo({ animal, state, onFeed, onBuyFood, onPet, onUpgradeSkill, o
       </View>
       {/* Tokluk çubuğu: yeşil tok, sarı acıkmış, turuncu üzgün, kırmızı kaçmak üzere. */}
       <View style={styles.bar}>
-        <View style={[styles.barFill, { width: `${Math.max(4, fullness * 100)}%`, backgroundColor: FULLNESS_COLOR[mood] }]} />
+        <View
+          style={[styles.barFill, { width: `${Math.max(4, fullness * 100)}%`, backgroundColor: FULLNESS_COLOR[mood] }]}
+        />
+      </View>
+      {/* Mutluluk çubuğu: ikram ve sevgiyle dolar, dolunca bahçe yıldız puanı kazanır. */}
+      <View style={styles.happyRow}>
+        <Text style={styles.happyLabel}>💖</Text>
+        <View style={[styles.bar, styles.happyBar]}>
+          <View
+            style={[
+              styles.barFill,
+              styles.happyFill,
+              { width: `${Math.max(3, (animal.happiness / HAPPY_MAX) * 100)}%` },
+            ]}
+          />
+        </View>
+        <Text style={styles.happyXp}>+{xpForHappy(animal.level)} ⭐</Text>
       </View>
       <Text style={[styles.status, mood === 'leaving' && styles.statusAlarm, mood === 'happy' && styles.statusCalm]}>
         {mood === 'happy'
@@ -294,6 +422,9 @@ function AnimalInfo({ animal, state, onFeed, onBuyFood, onPet, onUpgradeSkill, o
             <Text style={styles.buttonText}>{config.food.emoji} Yem al</Text>
           </Pressable>
         )}
+        <Pressable style={[styles.button, styles.treat]} onPress={onOpenTreats}>
+          <Text style={styles.buttonText}>🍬 İkram</Text>
+        </Pressable>
         <Pressable style={[styles.button, styles.pet]} onPress={onPet}>
           <Text style={styles.buttonText}>❤️ Sev</Text>
         </Pressable>
@@ -319,6 +450,59 @@ function AnimalInfo({ animal, state, onFeed, onBuyFood, onPet, onUpgradeSkill, o
           <Text style={styles.releaseText}>Doğaya sal +{formatNumber(releaseValue(animal, bonus))}</Text>
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+type TrayProps = {
+  animal: ParkAnimal;
+  state: GameState;
+  onGive: (treat: TreatId, buyFirst: boolean) => void;
+  onClose: () => void;
+};
+
+/**
+ * İkram tepsisi: bütün ikramlar. Stokta varsa sayısı, yoksa fiyatı yazar; dokununca hayvana verilir
+ * (yoksa önce alınır). Bu hayvana denenmiş ikramların yanında sevip sevmediği görünür.
+ */
+function TreatTray({ animal, state, onGive, onClose }: TrayProps) {
+  const config = animalFor(animal.level);
+  const price = treatPrice(state);
+  const tried = state.triedTreats[animal.level] ?? [];
+  const { likes, dislikes } = TASTES[animal.level];
+  return (
+    <View style={styles.info}>
+      <View style={styles.infoRow}>
+        <Text style={styles.trayTitle}>🍬 {config.name} ne sever?</Text>
+        <Pressable style={styles.trayClose} onPress={onClose} hitSlop={8}>
+          <Text style={styles.closeText}>✕</Text>
+        </Pressable>
+      </View>
+      <View style={styles.tray}>
+        {TREATS.map((t) => {
+          const stock = state.treats[t.id] ?? 0;
+          const affordable = stock > 0 || state.gold >= price;
+          const mark = !tried.includes(t.id)
+            ? null
+            : likes.includes(t.id)
+              ? '❤️'
+              : dislikes.includes(t.id)
+                ? '🤢'
+                : '🙂';
+          return (
+            <Pressable
+              key={t.id}
+              style={[styles.trayItem, !affordable && styles.disabled]}
+              disabled={!affordable}
+              onPress={() => onGive(t.id, stock === 0)}>
+              <Text style={styles.trayEmoji}>{t.emoji}</Text>
+              {mark && <Text style={styles.trayMark}>{mark}</Text>}
+              <Text style={styles.trayStock}>{stock > 0 ? `×${stock}` : `🪙${formatNumber(price)}`}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={styles.trayHint}>💭 Sol üstteki resim bugün ne istediğini gösterir.</Text>
     </View>
   );
 }
@@ -526,6 +710,108 @@ const styles = StyleSheet.create({
   },
   pet: {
     backgroundColor: '#FF7AA8',
+  },
+  treat: {
+    backgroundColor: '#FF9F45',
+  },
+  happyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  happyLabel: {
+    fontSize: 14,
+  },
+  happyBar: {
+    flex: 1,
+  },
+  happyFill: {
+    backgroundColor: '#FF7AA8',
+  },
+  happyXp: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#A0763F',
+  },
+  wish: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 18,
+    backgroundColor: 'white',
+    borderWidth: 2,
+    borderColor: '#FFB020',
+  },
+  wishEmoji: {
+    fontSize: 28,
+  },
+  reaction: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  reactionText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#5B3A1E',
+  },
+  reactionXp: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#E08A00',
+  },
+  trayTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#5B3A1E',
+  },
+  trayClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1E2C4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tray: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  trayItem: {
+    width: '18%',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#F1E2C4',
+  },
+  trayEmoji: {
+    fontSize: 28,
+  },
+  trayMark: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    fontSize: 12,
+  },
+  trayStock: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#5B3A1E',
+  },
+  trayHint: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#A0763F',
+    textAlign: 'center',
   },
   skill: {
     backgroundColor: '#B983FF',

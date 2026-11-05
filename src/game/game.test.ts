@@ -41,8 +41,8 @@ const SHINY = { shiny: true };
 const CHICK_EVERY_MS = ANIMALS[0].dropEverySec * 1000;
 const CHICK_DROP = ANIMALS[0].dropAmount;
 const CHICK_PER_SEC = CHICK_DROP / ANIMALS[0].dropEverySec;
-/** Aslan: büyük sayılarla çarpanlar (yarı, onda bir) yuvarlamaya takılmadan denenir. */
-const LION = ANIMALS[8];
+/** Zürafa: büyük sayılarla çarpanlar (yarı, onda bir) yuvarlamaya takılmadan denenir. */
+const GIRAFFE = ANIMALS[8];
 
 /** Bu testler oyunun kurallarını dener; ilk oyun rehberi (kısa kuluçkalar) tutorial.test.ts'te. */
 function createInitialState(now: number): GameState {
@@ -159,7 +159,7 @@ describe('birleştirme', () => {
     assert.equal(next.grid[1]?.id, 1);
   });
 
-  it('ejderha yumurtaları birleşmez', () => {
+  it('unicorn yumurtaları birleşmez', () => {
     const state = withGrid(createInitialState(T0), { 0: egg(1, 10), 1: egg(2, 10) });
     const next = gameReducer(state, { type: 'moveEgg', from: 0, to: 1 });
     assert.equal(next.grid[1]?.level, 10);
@@ -213,6 +213,9 @@ describe('kuluçka ve park', () => {
       fedAt: T0,
       skill: 0,
       parkedAt: T0,
+      happiness: 0,
+      petAt: 0,
+      wishDoneDay: null,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT);
@@ -393,6 +396,9 @@ describe('yükseltmeler', () => {
       fedAt: T0,
       skill: 0,
       parkedAt: T0,
+      happiness: 0,
+      petAt: 0,
+      wishDoneDay: null,
     }));
     state = gameReducer({ ...state, park: full }, { type: 'tick', now: T0 + 60_000 });
     assert.equal(state.park.length, PARK_LIMIT + 1);
@@ -412,15 +418,15 @@ describe('besleme', () => {
 
   it('acıkmış hayvan yarı, üzgün hayvan çok az, tokluğu bitmiş hayvan hiç altın vermez', () => {
     const { state, hatchAt } = withChick();
-    const lion = { ...state.park[0], level: LION.level, nextDropAt: hatchAt + 3000 };
+    const lion = { ...state.park[0], level: GIRAFFE.level, nextDropAt: hatchAt + 3000 };
     const at = (fullness: number) => {
       const fedAt = hatchAt + 3000 - (1 - fullness) * HUNGER_SEC * 1000;
       const s = gameReducer({ ...state, park: [{ ...lion, fedAt }] }, { type: 'tick', now: hatchAt + 3000 });
       return s.gold - state.gold;
     };
-    assert.equal(at(0.8), LION.dropAmount);
-    assert.equal(at(0.3), Math.round(LION.dropAmount * 0.5));
-    assert.equal(at(0.1), Math.round(LION.dropAmount * 0.1));
+    assert.equal(at(0.8), GIRAFFE.dropAmount);
+    assert.equal(at(0.3), Math.round(GIRAFFE.dropAmount * 0.5));
+    assert.equal(at(0.1), Math.round(GIRAFFE.dropAmount * 0.1));
     assert.equal(at(0), 0);
   });
 
@@ -524,7 +530,7 @@ describe('besleme', () => {
 
 describe('yetenekler', () => {
   it('tam gelişmiş yetenek dokümandaki oranlarda kazandırır', () => {
-    // Doküman: Sevimlilik +%100, Gösteri +%75, Görkem +%60, Kral +%45 (kedi, penguen, aslan, ejderha).
+    // Doküman: Sevimlilik +%100, Gösteri +%75, Görkem +%60, Sihir +%45 (kedi, tilki, zürafa, unicorn).
     const ratio = (level: number) =>
       goldPerSecond({ level, variant: NORMAL, skill: 3 }) / goldPerSecond({ level, variant: NORMAL, skill: 0 });
     assert.equal(ratio(3), 2);
@@ -560,18 +566,18 @@ describe('yetenekler', () => {
 
   it('yetenek kazancı artırır ama üzgün hayvanda çalışmaz', () => {
     const { state, hatchAt } = withChick();
-    // Aslan, 3. seviye Görkem (+%60).
-    const lion = { ...state.park[0], level: LION.level, skill: 3, nextDropAt: hatchAt + 3000 };
+    // Zürafa, 3. seviye Görkem (+%60).
+    const lion = { ...state.park[0], level: GIRAFFE.level, skill: 3, nextDropAt: hatchAt + 3000 };
     const at = (fullness: number) => {
       const fedAt = hatchAt + 3000 - (1 - fullness) * HUNGER_SEC * 1000;
       const s = gameReducer({ ...state, park: [{ ...lion, fedAt }] }, { type: 'tick', now: hatchAt + 3000 });
       return s.gold - state.gold;
     };
-    const skilled = Math.round(LION.dropAmount * 1.6);
+    const skilled = Math.round(GIRAFFE.dropAmount * 1.6);
     assert.equal(at(0.8), skilled);
     assert.equal(at(0.3), Math.round(skilled * 0.5));
     // Üzgün: yetenek çalışmaz, normal kazancın onda biri.
-    assert.equal(at(0.1), Math.round(LION.dropAmount * 0.1));
+    assert.equal(at(0.1), Math.round(GIRAFFE.dropAmount * 0.1));
   });
 
   it('kaçan hayvanın yumurtası yetenek seviyesini korur, yumurtadan çıkınca geri gelir', () => {
