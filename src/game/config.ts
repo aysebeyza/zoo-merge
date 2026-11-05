@@ -62,7 +62,13 @@ export const FIRST_HATCH_SEC = 3;
  * sürerken bu hayvanların kuluçkası FIRST_HATCH_SEC kadar kısadır.
  */
 export const TUTORIAL_ANIMALS = 3;
-export const DIAMONDS_PER_NEW_ANIMAL = 5;
+/**
+ * Yeni bir hayvan bulununca verilen elmas: her hayvan bir öncekinden 1 fazla (civciv 1, ejderha 10;
+ * bütün oyunda 55). Elmas az kalsın diye başta çok az; elmaslı yükseltmelerin çoğu parayla alınır.
+ */
+export function diamondsForNewAnimal(level: number): number {
+  return level;
+}
 
 // --- Yumurta sepeti ---
 // Yumurtalar altınla alınmaz: Tavuk Anne belli aralıklarla sepete yumurta bırakır (oyun kapalıyken de),
@@ -312,3 +318,52 @@ export function hungerMultiplier(fullness: number): number {
 export const OFFLINE_EARNING_CAP_SEC = 2 * 60 * 60;
 /** Oyuncu en az bu kadar uzak kaldıysa "Sen yokken ... kazandın!" ekranı çıkar. */
 export const AWAY_REPORT_SEC = 60;
+
+// --- Ziyaretçiler ---
+// Ziyaretçiler yolun bir ucundan girip öbür ucundan çıkar. Arada bir gelen ziyaretçinin başında 💰
+// olur; çocuk o geçip gitmeden dokunursa bahşiş toplanır, yetişemezse bahşiş de onunla gider.
+
+/** Bahşişli ziyaretçi bu aralıkla gelir (oyun açıkken). */
+export const TIP_EVERY_SEC = 3 * 60;
+/** Bahşişli ziyaretçinin yolda kaldığı süre; bu sürede dokunulmazsa gider. */
+export const TIP_STAY_SEC = 15;
+/** Bahşiş, parkın bu kadar saniyelik kazancı kadardır (en az TIP_MIN). */
+export const TIP_INCOME_SEC = 60;
+export const TIP_MIN = 10;
+
+/** Ekranda dolaşan ziyaretçi sayısı: hayvan çoğaldıkça ve "Daha çok ziyaretçi" alındıkça artar. */
+export function visitorCount(animals: number, moreVisitorsLevel: number): number {
+  if (animals === 0) return 0;
+  return Math.min(6, 1 + Math.floor(animals / 3) + moreVisitorsLevel);
+}
+
+// --- Bahçe seviyesi ---
+// Çocuk yaptığı her işle yıldız puanı (⭐) kazanır; puan dolunca bahçe seviye atlar ve hediye gelir.
+
+/** Yıldız puanları: yeni hayvan bulmak, hayvan çıkarmak, beslemek, bahşiş toplamak. */
+export function xpForNewAnimal(level: number): number {
+  return 10 * level;
+}
+export function xpForHatch(level: number): number {
+  return level;
+}
+export const XP_FEED = 2;
+export const XP_TIP = 1;
+
+/** Bu seviyeye ulaşmak için gereken toplam puan: 2. seviye 20, 3. seviye 60, 5. seviye 200 ... */
+export function xpForLevel(level: number): number {
+  return 10 * level * (level - 1);
+}
+
+export function levelForXp(xp: number): number {
+  let level = 1;
+  while (xp >= xpForLevel(level + 1)) level++;
+  return level;
+}
+
+/** Seviye hediyesi: parkın bu kadar saniyelik kazancı kadar altın (en az LEVEL_GOLD_MIN × seviye). */
+export const LEVEL_GOLD_INCOME_SEC = 120;
+export const LEVEL_GOLD_MIN = 100;
+/** Her LEVEL_DIAMOND_EVERY seviyede bir küçük elmas hediyesi; elmas az kalsın. */
+export const LEVEL_DIAMOND_EVERY = 5;
+export const LEVEL_DIAMONDS = 2;

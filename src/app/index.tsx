@@ -11,12 +11,13 @@ import { EscapedModal } from '@/components/escaped-modal';
 import { FruitMergeGame } from '@/components/fruit-merge-game';
 import { Hud } from '@/components/hud';
 import { Incubator } from '@/components/incubator';
+import { LevelUpModal } from '@/components/level-up-modal';
 import { NewAnimalModal } from '@/components/new-animal-modal';
 import { ParentGate } from '@/components/parent-gate';
 import { TutorialOverlay } from '@/components/tutorial-overlay';
 import { UpgradesPanel } from '@/components/upgrades-panel';
 import { Zoo } from '@/components/zoo';
-import { animalFor, GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES } from '@/game/config';
+import { animalFor, GRID_COLUMNS, TUTORIAL_ANIMALS, UPGRADES, visitorCount } from '@/game/config';
 import { formatDuration } from '@/game/format';
 import {
   basketCap,
@@ -29,6 +30,7 @@ import {
   parkIncomePerSecond,
   stateIncomeBonus,
   stateParkLimit,
+  tipAmount,
 } from '@/game/state';
 import { tutorialHint } from '@/game/tutorial';
 import { useGameSave } from '@/hooks/use-game-save';
@@ -191,6 +193,15 @@ export default function GameScreen() {
         targetRef={targetRef}
         onOpenAnimals={setAnimalsTab}
         onOpenEnclosure={setEnclosure}
+        level={state.level}
+        xp={state.xp}
+        visitors={visitorCount(state.park.length, state.upgrades.moreVisitors)}
+        tipUntil={state.tipUntil}
+        tipAmount={tipAmount(state)}
+        onCollectTip={() => {
+          dispatch({ type: 'collectTip' });
+          haptic('merge');
+        }}
       />
 
       <Incubator
@@ -374,12 +385,23 @@ export default function GameScreen() {
           inGiftBox={state.giftBox.length > 0}
           onClose={() => dispatch({ type: 'dismissEscaped' })}
         />
+      ) : celebrating !== undefined ? (
+        <NewAnimalModal
+          key={celebrating}
+          level={celebrating}
+          onClose={() => dispatch({ type: 'dismissNewAnimal' })}
+        />
       ) : (
-        celebrating !== undefined && (
-          <NewAnimalModal
-            key={celebrating}
-            level={celebrating}
-            onClose={() => dispatch({ type: 'dismissNewAnimal' })}
+        // Seviye kutlaması en son ve rehber bittikten sonra gösterilir.
+        state.levelUps[0] !== undefined &&
+        state.tutorialStep === null && (
+          <LevelUpModal
+            key={state.levelUps[0].level}
+            levelUp={state.levelUps[0]}
+            onClose={() => {
+              dispatch({ type: 'dismissLevelUp' });
+              haptic('success');
+            }}
           />
         )
       )}

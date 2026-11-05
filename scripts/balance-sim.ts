@@ -59,6 +59,9 @@ function play(state: GameState, random: () => number): GameState {
   for (let guard = 0; guard < 300; guard++) {
     let changed = false;
 
+    // 0. Ziyaretçilerin bahşişlerini topla.
+    if (s.tipUntil !== null) changed = run({ type: 'collectTip' }) || changed;
+
     // 1. Acıkan hayvanları besle; yemi yoksa önce al.
     for (const animal of s.park) {
       if (s.now < hungryAt(animal)) continue;
@@ -148,12 +151,13 @@ function play(state: GameState, random: () => number): GameState {
 type Result = { level: number; wallMs: number; playMs: number }[];
 
 /** isPlaying: o anda oyun açık mı. Kapalıyken oyun yalnızca oyuncu geri dönünce ilerler. */
-type Simulation = { found: Result; state: GameState; earnedByDay: number[]; bought: typeof purchases };
+type Simulation = { found: Result; state: GameState; earnedByDay: number[]; levelByDay: number[]; bought: typeof purchases };
 
 function simulate(isPlaying: (t: number) => boolean, maxMs: number): Simulation {
   const random = rng(42);
   purchases = [];
   const earnedByDay: number[] = [];
+  const levelByDay: number[] = [];
   const start = 8 * HOUR; // 1. gün, sabah 08:00
   // Rehber elle oynanır; simülasyon onu atlar (rehberde yalnızca elin gösterdiği hamle yapılabilir).
   let s = gameReducer(createInitialState(start), { type: 'finishTutorial' });
@@ -172,6 +176,7 @@ function simulate(isPlaying: (t: number) => boolean, maxMs: number): Simulation 
     s = gameReducer(s, { type: 'tick', now: t });
     const day = Math.floor((t - start) / DAY);
     earnedByDay[day] = (earnedByDay[day] ?? 0) + Math.max(0, s.gold - goldBefore);
+    levelByDay[day] = s.level;
     const before = s.discovered.length;
     s = play(s, random);
     played += SEC;
@@ -182,7 +187,7 @@ function simulate(isPlaying: (t: number) => boolean, maxMs: number): Simulation 
     }
     if (s.discovered.includes(MAX_LEVEL)) break;
   }
-  return { found, state: s, earnedByDay, bought: purchases };
+  return { found, state: s, earnedByDay, levelByDay, bought: purchases };
 }
 
 function wall(ms: number): string {
@@ -207,17 +212,19 @@ function report(title: string, found: Result, state: GameState, showWall: boolea
     const play = f ? duration(f.playMs) : '-';
     console.log(`${animal.name.padEnd(10)} | ${play.padStart(12)}${showWall ? ` | ${f ? wall(f.wallMs) : '-'}` : ''}`);
   }
-  console.log(`Sonda altın: ${formatNumber(state.gold)} · Parkta ${state.park.length} hayvan`);
+  console.log(`Sonda altın: ${formatNumber(state.gold)} · Parkta ${state.park.length} hayvan · Bahçe ${state.level}. seviye`);
 }
 
 /** Her gün ne kadar altın kazanıldığını ve hangi yükseltmelerin alındığını yazar. */
 function reportDays(sim: Simulation) {
-  console.log('Gün | Kazanılan altın | Alınan yükseltmeler');
+  console.log('Gün | Bahçe seviyesi | Kazanılan altın | Alınan yükseltmeler');
   sim.earnedByDay.forEach((earned, day) => {
     const bought = sim.bought
       .filter((p) => Math.floor((p.at - 8 * HOUR) / DAY) === day)
       .map((p) => `${upgradeFor(p.id).name} ${p.level}`);
-    console.log(`${String(day + 1).padStart(3)} | ${formatNumber(earned).padStart(15)} | ${bought.join(', ') || '-'}`);
+    console.log(
+      `${String(day + 1).padStart(3)} | ${String(sim.levelByDay[day]).padStart(14)} | ${formatNumber(earned).padStart(15)} | ${bought.join(', ') || '-'}`,
+    );
   });
 }
 

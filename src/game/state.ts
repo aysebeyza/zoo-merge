@@ -10,7 +10,7 @@ import {
   BASKET_EVERY_SEC,
   BASKET_START,
   BETTER_EGG_CHANCE,
-  DIAMONDS_PER_NEW_ANIMAL,
+  diamondsForNewAnimal,
   ESCAPE_AFTER_EMPTY_SEC,
   FEED_BELOW,
   FIRST_HATCH_SEC,
@@ -37,6 +37,19 @@ import {
   upgradeFor,
   UPGRADES,
   type UpgradeId,
+  LEVEL_DIAMOND_EVERY,
+  LEVEL_DIAMONDS,
+  LEVEL_GOLD_INCOME_SEC,
+  LEVEL_GOLD_MIN,
+  levelForXp,
+  TIP_EVERY_SEC,
+  TIP_INCOME_SEC,
+  TIP_MIN,
+  TIP_STAY_SEC,
+  XP_FEED,
+  xpForHatch,
+  xpForNewAnimal,
+  XP_TIP,
 } from './config.ts';
 
 export type Egg = {
@@ -71,6 +84,15 @@ export type ParkAnimal = {
   parkedAt: number;
 };
 
+/** Bahçenin seviye atlaması ve verilen hediye; ekranda kutlamayla gösterilir. */
+export type LevelUp = {
+  level: number;
+  gold: number;
+  diamonds: number;
+  /** Birer yem hediye edilen hayvanların seviyeleri. */
+  food: number[];
+};
+
 export type GameState = {
   now: number;
   gold: number;
@@ -102,6 +124,16 @@ export type GameState = {
    * TUTORIAL_ANIMALS + 1 Hayvanlarım ekranını açmak; rehber bittiyse null.
    */
   tutorialStep: number | null;
+  /** Bahçenin yıldız puanı; seviye bundan hesaplanır (levelForXp). */
+  xp: number;
+  /** Hediyesi verilmiş en son seviye; rehber sürerken kazanılan seviyeler rehber bitince verilir. */
+  level: number;
+  /** Ekranda gösterilecek seviye atlama kutlamaları; hediyeler verilmiş olarak bekler. */
+  levelUps: LevelUp[];
+  /** Bahşişli ziyaretçi yoldaysa yoldan çıkacağı an; yoksa null. */
+  tipUntil: number | null;
+  /** Son bahşişli ziyaretçinin geldiği an; sıradaki bundan TIP_EVERY_SEC sonra gelir. */
+  tipTimerAt: number;
 };
 
 export type GameAction =
@@ -132,6 +164,9 @@ export type GameAction =
   | { type: 'finishTutorial' }
   /** Oyunu baştan başlatır (ebeveyn onayından sonra); rehber de yeniden gösterilir. */
   | { type: 'reset'; now: number }
+  /** Bahşişli ziyaretçiye, o gitmeden dokunuldu: bahşiş toplanır. */
+  | { type: 'collectTip' }
+  | { type: 'dismissLevelUp' }
   | { type: 'dismissNewAnimal' }
   | { type: 'dismissAwayGold' }
   | { type: 'dismissEscaped' };
@@ -156,7 +191,54 @@ export function createInitialState(now: number): GameState {
     escapedQueue: [],
     food: {},
     tutorialStep: 1,
+    xp: 0,
+    level: 1,
+    levelUps: [],
+    tipUntil: null,
+    tipTimerAt: now,
   };
+}
+
+/** Bahçenin seviyesi. */
+export function zooLevel(state: Pick<GameState, 'level'>): number {
+  return state.level;
+}
+
+/** Bir bahşiş kaç altın: parkın TIP_INCOME_SEC saniyelik kazancı, en az TIP_MIN. */
+export function tipAmount(state: GameState): number {
+  return Math.max(TIP_MIN, Math.round(parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now) * TIP_INCOME_SEC));
+}
+
+/**
+ * Yıldız puanı ekler. Seviye atlanırsa hediyeler hemen verilir (altın, bulunan her hayvana birer yem,
+ * birkaç seviyede bir elmas) ve kutlama sıraya girer.
+ */
+export function gainXp(state: GameState, amount: number): GameState {
+  return amount > 0 ? settleLevels({ ...state, xp: state.xp + amount }) : state;
+}
+
+/** Puanın ulaştığı ama hediyesi verilmemiş seviyeleri verir; rehber sürerken bekletir. */
+function settleLevels(state: GameState): GameState {
+  const from = state.level;
+  const to = levelForXp(state.xp);
+  if (to <= from || state.tutorialStep !== null) return state;
+  let { gold, diamonds } = state;
+  const food = { ...state.food };
+  const levelUps = [...state.levelUps];
+  const income = parkIncomePerSecond(state.park, stateIncomeBonus(state), state.now);
+  for (let level = from + 1; level <= to; level++) {
+    const reward: LevelUp = {
+      level,
+      gold: Math.max(LEVEL_GOLD_MIN * level, Math.round(income * LEVEL_GOLD_INCOME_SEC)),
+      diamonds: level % LEVEL_DIAMOND_EVERY === 0 ? LEVEL_DIAMONDS : 0,
+      food: [...state.discovered].sort((a, b) => a - b),
+    };
+    gold += reward.gold;
+    diamonds += reward.diamonds;
+    for (const l of reward.food) food[l] = (food[l] ?? 0) + 1;
+    levelUps.push(reward);
+  }
+  return { ...state, level: to, gold, diamonds, food, levelUps };
 }
 
 /** Yükseltmenin bir sonraki seviyesine yetecek altın ya da elmas var mı. */
@@ -410,11 +492,19 @@ function applyAction(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case 'collectTip': {
+      if (state.tipUntil === null || state.now >= state.tipUntil) return state;
+      return gainXp({ ...state, gold: state.gold + tipAmount(state), tipUntil: null }, XP_TIP);
+    }
+
+    case 'dismissLevelUp':
+      return { ...state, levelUps: state.levelUps.slice(1) };
+
     case 'dismissNewAnimal':
       return advanceTutorial({ ...state, newAnimalQueue: state.newAnimalQueue.slice(1) });
 
     case 'finishTutorial':
-      return state.tutorialStep === null ? state : { ...state, tutorialStep: null };
+      return state.tutorialStep === null ? state : settleLevels({ ...state, tutorialStep: null });
 
     case 'reset':
       return createInitialState(action.now);
@@ -468,11 +558,14 @@ function applyAction(state: GameState, action: GameAction): GameState {
     case 'feedAnimal': {
       const animal = state.park.find((a) => a.id === action.id);
       if (!animal || !canFeed(state, animal)) return state;
-      return {
-        ...state,
-        food: { ...state.food, [animal.level]: foodStock(state, animal.level) - 1 },
-        park: state.park.map((a) => (a.id === animal.id ? { ...a, fedAt: state.now } : a)),
-      };
+      return gainXp(
+        {
+          ...state,
+          food: { ...state.food, [animal.level]: foodStock(state, animal.level) - 1 },
+          park: state.park.map((a) => (a.id === animal.id ? { ...a, fedAt: state.now } : a)),
+        },
+        XP_FEED,
+      );
     }
 
     case 'takeGift': {
@@ -566,6 +659,7 @@ function tick(state: GameState, now: number): GameState {
   }
 
   // Kuluçkası biten yumurtalar, parkta yer varsa hayvan olarak parka çıkar.
+  let xpGained = 0;
   const incubator = state.incubator.map((slot) => {
     if (!slot || now < slot.startedAt + slot.durationMs || park.length >= maxPark) return slot;
     const { level, variant, skill = 0 } = slot.egg;
@@ -583,17 +677,32 @@ function tick(state: GameState, now: number): GameState {
         parkedAt: now,
       },
     ];
+    xpGained += xpForHatch(level);
     if (!discovered.includes(level)) {
+      xpGained += xpForNewAnimal(level);
       discovered = [...discovered, level];
       newAnimalQueue = [...newAnimalQueue, level];
-      diamonds += DIAMONDS_PER_NEW_ANIMAL;
+      diamonds += diamondsForNewAnimal(level);
     }
     return null;
   });
 
-  return advanceTutorial({
+  // Bahşişli ziyaretçi: rehber bitince ve parkta hayvan varken arada bir gelir, TIP_STAY_SEC sonra
+  // gider; toplanmayan bahşiş de onunla gider. Oyun kapalıyken gelen ziyaretçi beklemez.
+  let { tipUntil, tipTimerAt } = state;
+  if (tipUntil !== null && now >= tipUntil) tipUntil = null;
+  if (state.tutorialStep !== null || park.length === 0) {
+    tipTimerAt = now;
+  } else if (tipUntil === null && now >= tipTimerAt + TIP_EVERY_SEC * 1000) {
+    tipUntil = now + TIP_STAY_SEC * 1000;
+    tipTimerAt = now;
+  }
+
+  const next = advanceTutorial({
     ...state,
     now,
+    tipUntil,
+    tipTimerAt,
     gold,
     diamonds,
     discovered,
@@ -608,6 +717,7 @@ function tick(state: GameState, now: number): GameState {
     giftBox,
     escapedQueue,
   });
+  return gainXp(next, xpGained);
 }
 
 /**

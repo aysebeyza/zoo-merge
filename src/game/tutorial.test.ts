@@ -118,8 +118,12 @@ describe('ilk oyun rehberi', () => {
       '🐟 Kedini besle',
       'Aferin! Acıkınca yine besle 🎉',
     ]);
-    // Hediye yemlerin hepsi yendi, üç hayvan da tok.
-    assert.deepEqual(state.food, { 1: 0, 2: 0, 3: 0 });
+    // Hediye yemlerin hepsi yendi, üç hayvan da tok. Rehberde kazanılan seviyelerin hediyesi rehber
+    // bitince gelir: her seviyede bulunan her hayvana birer yem.
+    const levels = state.levelUps.length;
+    assert.ok(levels > 0);
+    assert.equal(state.level, 1 + levels);
+    assert.deepEqual(state.food, { 1: levels, 2: levels, 3: levels });
     assert.ok(state.park.every((a) => a.fedAt === state.now));
     assert.equal(state.tutorialStep, null);
     assert.deepEqual(order, [1, 2, 3]);

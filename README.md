@@ -42,7 +42,9 @@ Oyunun dengesini değiştirmek için çoğu zaman yalnızca `src/game/config.ts`
 - Her hayvanın yumurtası hep aynı renk (civciv sarı, kedi turuncu ...); nadir parlak (✨) yumurta %50 fazla kazandırır, birleşince parlaklık korunur
 - 2 yuvalı kuluçka makinesi
 - Hayvanat bahçesi: her hayvanın kendi alanı var (10 alan, altında adı yazar; bulunmamış hayvanın alanında "?" durur). Alanda o türden kaç hayvan olduğu (×3), acıkan olup olmadığı ve düşen altın görünür. Alana dokununca hayvan büyük görünür; aynı türden birden çok hayvan varsa ◀ ▶ oklarla gezilir. Orada besle, ❤️ sev (hayvan zıplar, kalpler uçar), yetenek geliştir, doğaya sal.
-- "Yeni hayvan!" kutlaması ve elmas ödülü
+- Ziyaretçiler: iki sıra alanın arasındaki yolun bir ucundan girip öbür ucundan çıkarlar (hayvan çoğaldıkça ve "Daha çok ziyaretçi" alındıkça artar, en fazla 6). 3 dakikada bir başında 💰 olan bir ziyaretçi gelir ve yolu 15 saniyede geçer; çocuk o gitmeden dokunursa parkın 1 dakikalık kazancı kadar bahşiş gelir, yetişemezse bahşiş de onunla gider. Oyun kapalıyken bahşiş birikmez.
+- Bahçe seviyesi (⭐): yeni hayvan bulmak, hayvan çıkarmak, beslemek ve bahşiş toplamak yıldız puanı verir. Seviye atlayınca "Bahçen büyüdü!" kutlaması ve hediye: altın, bulunan her hayvana bir yem, her 5 seviyede 2 💎. Rehberde kazanılan seviyelerin hediyesi rehber bitince gelir. Simülasyonda 1. gün 5., 3. gün 7., 8. gün 10. seviye.
+- "Yeni hayvan!" kutlaması ve elmas ödülü: her yeni hayvan bir öncekinden 1 elmas fazla verir (civciv 1, tavşan 2 ... ejderha 10; bütün oyunda 55 elmas). Elmaslı yükseltmeler toplam 250 elmas; elmas bilerek az, gerisi ileride parayla alınacak.
 - Kayıt: oyun telefona kaydedilir, kapanıp açılınca kaldığı yerden devam eder
 - Oyun kapalıyken en fazla 2 saatlik altın birikir, dönünce "Tekrar hoş geldin!" ekranı çıkar
 - Yumurta sepeti (🧺): yumurtalar altınla alınmaz. Tavuk Anne 5 dakikada bir sepete yumurta bırakır (oyun kapalıyken de), sepet 20 yumurta alır ve dolu başlar; Büyük sepet her seviyede 10 artırır (en fazla 60). Günde 3 × 20 dk oynayan çocuk ejderhayı 8. gün çıkarır (`npm run sim`, her günün kazancını ve alınan yükseltmeleri de yazar).

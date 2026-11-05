@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   ANIMALS,
+  diamondsForNewAnimal,
   AUTO_FEEDER_REFUND,
   BASKET_CAP,
   BASKET_EVERY_SEC,
@@ -176,7 +177,21 @@ describe('kuluçka ve park', () => {
     assert.equal(state.park.length, 1);
     assert.equal(state.incubator[0], null);
     assert.deepEqual(state.newAnimalQueue, [1]);
-    assert.equal(state.diamonds, 5);
+    assert.equal(state.diamonds, 1);
+  });
+
+  it('yeni hayvanın elması her hayvanda 1 artar, bütün oyunda 55 elmas', () => {
+    const rewards = ANIMALS.map((a) => diamondsForNewAnimal(a.level));
+    assert.deepEqual(rewards, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    assert.equal(rewards.reduce((a, b) => a + b, 0), 55);
+  });
+
+  it('bilinen bir hayvan yeniden çıkınca elmas vermez', () => {
+    let state = { ...withGrid(createInitialState(T0), { 0: egg(1, 3) }), firstHatchDone: true, discovered: [1, 2, 3] };
+    state = gameReducer(state, { type: 'incubate', from: 0, slot: 0 });
+    state = gameReducer(state, { type: 'tick', now: T0 + ANIMALS[2].incubationSec * 1000 });
+    assert.equal(state.park.length, 1);
+    assert.equal(state.diamonds, 0);
   });
 
   it('sonraki kuluçkalar tablodaki süreyi kullanır', () => {

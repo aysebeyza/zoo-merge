@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { animalFor, DIAMONDS_PER_NEW_ANIMAL, MAX_LEVEL } from '@/game/config';
+import { animalFor, diamondsForNewAnimal, MAX_LEVEL } from '@/game/config';
 
 type Props = {
   level: number;
@@ -23,7 +23,7 @@ export function NewAnimalModal({ level, onClose }: Props) {
         <Text style={styles.title}>Yeni hayvan!</Text>
         <Text style={styles.emoji}>{animal.emoji}</Text>
         <Text style={styles.name}>{animal.name}</Text>
-        <Text style={styles.reward}>+{DIAMONDS_PER_NEW_ANIMAL} 💎</Text>
+        <Text style={styles.reward}>+{diamondsForNewAnimal(level)} 💎</Text>
         {next && (
           <View style={styles.nextRow}>
             <Text style={styles.nextLabel}>Sıradaki:</Text>
